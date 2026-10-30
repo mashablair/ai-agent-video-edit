@@ -1,0 +1,78 @@
+{
+ "src": "/sessions/rcw-01sdmjfxsxjwdqpqvrowryal/mnt/AI agent video edit/edited/breadcrumbing_clean.mp4",
+ "words": "/sessions/rcw-01sdmjfxsxjwdqpqvrowryal/vp/glo/words.json",
+ "library": "/sessions/rcw-01sdmjfxsxjwdqpqvrowryal/mnt/b-roll collection",
+ "fontsdir": "/sessions/rcw-01sdmjfxsxjwdqpqvrowryal/mnt/AI agent video edit/_tools/fonts/glorious",
+ "W": 1440,
+ "H": 2560,
+ "fps": 30,
+ "t0": 24.8,
+ "t1": 38.0,
+ "face": [
+  725,
+  1024
+ ],
+ "merge": [
+  [
+   74,
+   75
+  ]
+ ],
+ "emph": {
+  "breadcrumbing": "neg",
+  "illusion": "serif",
+  "dating": "script",
+  "committing": "neg",
+  "disappearing": "yellow"
+ },
+ "zooms": [
+  {
+   "a": 0.0,
+   "b": 1.45,
+   "z": 1.2
+  }
+ ],
+ "broll": [
+  {
+   "a": 4.55,
+   "b": 6.2,
+   "clip": "cafe-umbrellas-ocean-drive",
+   "from": 0.3,
+   "reveal": true
+  },
+  {
+   "a": 6.2,
+   "b": 7.45,
+   "clip": "cocktails-dinner-table",
+   "from": 0.3,
+   "headline": [
+    "there"
+   ]
+  },
+  {
+   "a": 7.45,
+   "b": 8.65,
+   "clip": "breakers-table-sunlight",
+   "from": 0.5,
+   "headline": [
+    "not"
+   ]
+  },
+  {
+   "a": 8.65,
+   "b": 10.0,
+   "clip": "lobby-light-garland",
+   "from": 0.4,
+   "headline": [
+    "hot",
+    "COLD"
+   ]
+  },
+  {
+   "a": 10.0,
+   "b": 11.4,
+   "clip": "stock-hands-phone-dark",
+   "from": 0.5
+  }
+ ]
+}
