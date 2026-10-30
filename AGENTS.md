@@ -1,0 +1,21 @@
+# AGENTS.md (for Codex and other non-Claude agents)
+
+This folder is shared by Claude Code and Codex. **`CLAUDE.md` is the single source of truth.** Read it completely before doing anything, and follow it exactly: the folders, house rules, first-run setup and card style all apply to you too.
+
+## How to use the Claude-specific parts
+- **Skills:** the workflows live in `.claude/skills/<name>/SKILL.md`. When Maria asks for one of these tasks, open the matching file and follow its steps as plain instructions:
+  - `polish-talking-video`: step 1 cleanup ("clean up <video>", "render my cuts for <name>")
+  - `glorious-visuals`: step 2 visuals ("add the Glorious visuals", "render my edits for <name>")
+  - `add-broll-to-video`: B-roll-only pass
+  - `update-broll-library`: catalog new B-roll in `~/Desktop/b-roll collection`
+- Apply the translation table in CLAUDE.md: the skills were written for a cloud bridge (`device_bash`, `$HOME/mnt/...` paths, a 180-second limit, "staging" images). On this Mac, run commands directly, use the real `~/Desktop/...` paths, and open images yourself to check renders.
+- Mentions of Claude's tools (the Read tool, slash commands, `.claude/settings.json`) map to your own equivalents.
+
+## Environment (already set up; don't reinstall)
+- Python venv: `~/vidpolish/.venv/bin/python`. ffmpeg comes from Homebrew. Models, fonts and scripts are in `_agent/`. See the folder layout table in CLAUDE.md: raw videos in `Drop raw videos here/`, everything generated per video in `Videos/<name>/`, editors in `Editors/`.
+- The B-roll library is outside this folder: `~/Desktop/b-roll collection`. You need write access to it for library updates and for the usage log in `_catalog/CATALOG.md`.
+
+## Working alongside Claude Code
+- All state lives in files (`Videos/*/editor files/*_project.json`, `_catalog/clips.json`, the usage log in CATALOG.md), so either agent can pick up where the other stopped.
+- Never work on the same video at the same time as another agent.
+- If you learn a new rule from Maria, add it to **CLAUDE.md** (not here) so both agents get it.

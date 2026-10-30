@@ -1,0 +1,18 @@
+.DS_Store
+
+# Her footage stays on this Mac. GitHub also rejects files over 100MB.
+*.mov
+*.mp4
+*.m4v
+*.wav
+*.m4a
+*.aac
+
+# Scratch renders, superseded copies, and files waiting to be deleted.
+_agent/tmp/
+
+# Speech model (~630MB). The local copy in _agent/ is what the pipeline uses.
+_agent/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/
+
+# Linux aarch64 wheels from the old Ubuntu VM. They do not install on macOS.
+_agent/wheels/
