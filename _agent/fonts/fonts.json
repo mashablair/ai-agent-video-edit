@@ -1,0 +1,137 @@
+[
+ {
+  "key": "montserrat-xb",
+  "label": "Montserrat ExtraBold",
+  "file": "Montserrat-ExtraBold.ttf",
+  "ass": "Montserrat ExtraBold",
+  "italic": false,
+  "k": 1.562,
+  "h": 1.219
+ },
+ {
+  "key": "anton",
+  "label": "Anton",
+  "file": "Anton-Regular.ttf",
+  "ass": "Anton",
+  "italic": false,
+  "k": 1.7334,
+  "h": 1.5054
+ },
+ {
+  "key": "bebas",
+  "label": "Bebas Neue",
+  "file": "BebasNeue-Regular.ttf",
+  "ass": "Bebas Neue",
+  "italic": false,
+  "k": 1.3,
+  "h": 1.2
+ },
+ {
+  "key": "poppins-xb",
+  "label": "Poppins ExtraBold",
+  "file": "Poppins-ExtraBold.ttf",
+  "ass": "Poppins ExtraBold",
+  "italic": false,
+  "k": 1.762,
+  "h": 1.4
+ },
+ {
+  "key": "poppins-sb",
+  "label": "Poppins SemiBold",
+  "file": "Poppins-SemiBold.ttf",
+  "ass": "Poppins SemiBold",
+  "italic": false,
+  "k": 1.762,
+  "h": 1.4
+ },
+ {
+  "key": "dmserif",
+  "label": "DM Serif Display",
+  "file": "DMSerifDisplay-Regular.ttf",
+  "ass": "DM Serif Display",
+  "italic": false,
+  "k": 1.371,
+  "h": 1.371
+ },
+ {
+  "key": "dmserif-italic",
+  "label": "DM Serif Display Italic",
+  "file": "DMSerifDisplay-Italic.ttf",
+  "ass": "DM Serif Display",
+  "italic": true,
+  "k": 1.371,
+  "h": 1.371
+ },
+ {
+  "key": "greatvibes",
+  "label": "Great Vibes (script)",
+  "file": "GreatVibes-Regular.ttf",
+  "ass": "Great Vibes",
+  "italic": false,
+  "k": 1.75,
+  "h": 1.252
+ },
+ {
+  "key": "intertight-b",
+  "label": "Inter Tight Bold (Glorious)",
+  "file": "GLSans.ttf",
+  "ass": "GL Sans",
+  "italic": false,
+  "k": 1.464,
+  "h": 1.244
+ },
+ {
+  "key": "intertight-bi",
+  "label": "Inter Tight Bold Italic (Glorious)",
+  "file": "GLSansItalic.ttf",
+  "ass": "GL Sans Italic",
+  "italic": false,
+  "k": 1.426,
+  "h": 1.212
+ },
+ {
+  "key": "instrument-i",
+  "label": "Instrument Serif Italic (Glorious)",
+  "file": "GLSerifItalic.ttf",
+  "ass": "GL Serif Italic",
+  "italic": false,
+  "k": 1.304,
+  "h": 1.108
+ },
+ {
+  "key": "yellowtail",
+  "label": "Yellowtail script (Glorious)",
+  "file": "GLScript.ttf",
+  "ass": "GL Script",
+  "italic": false,
+  "k": 1.301,
+  "h": 1.106
+ },
+ {
+  "key": "intertight-m",
+  "label": "Inter Tight Medium (Glorious cards)",
+  "file": "GLSansMedium.ttf",
+  "ass": "GL Sans Medium",
+  "italic": false,
+  "k": 1.472,
+  "h": 1.251
+ },
+ {
+  "key": "intertight-black",
+  "label": "Inter Tight Black (Glorious hook)",
+  "file": "GLSansBlack.ttf",
+  "ass": "GL Sans Black",
+  "italic": false,
+  "k": 1.464,
+  "h": 1.244
+ },
+ {
+  "key": "roboto-b",
+  "label": "Roboto Bold (Mic Drop)",
+  "file": "GLRobotoBold.ttf",
+  "ass": "GL Roboto Bold",
+  "italic": false,
+  "k": 1.3188,
+  "h": 1.3188
+ }
+]
