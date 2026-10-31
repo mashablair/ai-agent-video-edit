@@ -3,10 +3,11 @@
 Captions: Inter Tight Bold #FCFCFC, no outline/shadow/box, centered, <=2 lines, tight tracking/leading, each word slides
  in from the left as spoken, lead word supersized. Per-word keyword styles (word["emph"]): neg (Inter Tight Bold Italic in
  NEGATIVE mode: the letters show the inverted picture), serif (Instrument Serif Italic), script (yellow brush script),
- yellow (mustard Inter Tight Bold).
+ yellow (mustard Inter Tight Bold), num (accent Inter Tight Bold for prices, years and percents; see "numbers").
 Visuals: B-roll slots with a slow push-in; slot options "headline" ("there" or "hot|COLD") and "reveal" (framed photo on a
  blurred copy that grows to full screen); project "zooms" [{a,b,z}] punch-ins on her face; project "tiles" [{a,b,num,text}].
-Usage:  glorious.py plan PROJECT.json            -> pages + chunk count
+Usage:  glorious.py numbers PROJECT.json [--dry]  -> spoken prices/years/percents become digits ("$9.5 million.") in the num style
+        glorious.py plan PROJECT.json            -> pages + chunk count
         glorious.py chunk PROJECT.json WD N      -> WD/glo_N.mp4 (video only)
         glorious.py assemble PROJECT.json WD OUT -> joins chunks + the source audio
 Times are absolute; each chunk is rendered on an absolute timeline, so captions/B-roll can cross chunk edges."""
@@ -16,9 +17,9 @@ HERE=os.path.dirname(os.path.abspath(__file__)); VID=os.path.dirname(HERE)
 FONTDIR=os.path.join(HERE,"fonts"); LIB=os.path.join(os.path.dirname(VID),"b-roll collection")
 FONTS={"black":("GL Sans Black","GLSansBlack.ttf"),"sans":("GL Sans","GLSans.ttf"),"sansm":("GL Sans Medium","GLSansMedium.ttf"),"sansi":("GL Sans Italic","GLSansItalic.ttf"),
        "serif":("GL Serif Italic","GLSerifItalic.ttf"),"script":("GL Script","GLScript.ttf")}
-WHITE="#FCFCFC"; YELLOW="#F2EC2E"; MUSTARD="#D9C933"
+WHITE="#FCFCFC"; YELLOW="#F2EC2E"; MUSTARD="#D9C933"; NUMCOL="#FFB000"
 STY={"small":("sans",.068,WHITE,False),"big":("sans",.13,WHITE,False),"neg":("sansi",.12,WHITE,True),
-     "serif":("serif",.14,WHITE,False),"script":("script",.15,YELLOW,False),"yellow":("sans",.12,MUSTARD,False)}
+     "serif":("serif",.14,WHITE,False),"script":("script",.15,YELLOW,False),"yellow":("sans",.12,MUSTARD,False),"num":("sans",.12,NUMCOL,False)}
 SPAN=24.0
 def hexass(h,a=0): h=h.lstrip("#"); return f"&H{a:02X}{h[4:6]}{h[2:4]}{h[0:2]}&"
 def ts(t): t=max(0,t); return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
@@ -49,8 +50,124 @@ def load(pp):
                 sizes={k:float(c.get("gSizes",{}).get(k,v[1])) for k,v in STY.items()},
                 pad=float(c.get("gPad",0.06)),line=float(c.get("gLine",0.72)),
                 colors={"small":c.get("color","#FCFCFC"),"big":c.get("color","#FCFCFC"),"serif":c.get("color","#FCFCFC"),
-                        "script":c.get("gScriptColor",YELLOW),"yellow":c.get("gYellowColor",MUSTARD)},outline=float(c.get("gOutline",0.003)) if c.get("gOutlineOn") else 0.0,outline_c=c.get("gOutlineColor","#000000"),
+                        "script":c.get("gScriptColor",YELLOW),"yellow":c.get("gYellowColor",MUSTARD),"num":c.get("gNumColor",NUMCOL)},outline=float(c.get("gOutline",0.003)) if c.get("gOutlineOn") else 0.0,outline_c=c.get("gOutlineColor","#000000"),
                 shadow=float(c.get("gShadow",0.003)),shadow_op=float(c.get("gShadowOpacity",0.5)),shadow_blur=float(c.get("gShadowBlur",0.006)))
+
+# Spoken numbers -> digits. Only amounts with a clear unit change; anything unsure is listed for a human to read.
+UNITS={n:i for i,n in enumerate("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split())}
+TENS={n:(i+2)*10 for i,n in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split())}
+SCALES={"thousand":1000,"million":10**6,"billion":10**9}
+COSTS={"for","cost","costs","costing","paid","pay","pays","price","priced","worth","spent","spend","spends","charge","charges","sold","bought","make","makes","made","earn","earns"}
+def _low(w): return re.sub(r"[^a-z0-9$.,%-]","",w.lower()).rstrip(".,")
+def _say(tok,i):
+    """Whole number spoken in words starting at tok[i]: returns (value, next index) or None."""
+    n=len(tok); val=None; k=i
+    if k<n and tok[k]=="a" and k+1<n and tok[k+1] in ("hundred","thousand","million","billion"): val=1; k+=1
+    elif k<n and tok[k] in TENS:
+        val=TENS[tok[k]]; k+=1
+        if k<n and tok[k] in UNITS and 0<UNITS[tok[k]]<10: val+=UNITS[tok[k]]; k+=1
+    elif k<n and tok[k] in UNITS: val=UNITS[tok[k]]; k+=1
+    if val is None: return None
+    if k<n and tok[k]=="hundred":
+        val*=100; k+=1
+        m=k+1 if k<n and tok[k]=="and" else k
+        r=_say2(tok,m)
+        if r: val+=r[0]; k=r[1]
+    return val,k
+def _say2(tok,i):
+    n=len(tok)
+    if i<n and tok[i] in TENS:
+        v=TENS[tok[i]]; i+=1
+        if i<n and tok[i] in UNITS and 0<UNITS[tok[i]]<10: v+=UNITS[tok[i]]; i+=1
+        return v,i
+    if i<n and tok[i] in UNITS and tok[i]!="zero": return UNITS[tok[i]],i+1
+    return None
+def _amount(tok,i):
+    """One amount at tok[i]: returns (value as float, scale word or None, had a $ sign, next index) or None."""
+    n=len(tok); dollar=False; m=re.fullmatch(r"(\$?)(\d[\d,]*(?:\.\d+)?)",tok[i]) if i<n else None
+    if m: dollar=bool(m[1]); v=float(m[2].replace(",","")); k=i+1
+    else:
+        r=_say(tok,i)
+        if not r: return None
+        v,k=float(r[0]),r[1]
+    if k<n and tok[k]=="point" and k+1<n and tok[k+1] in UNITS and tok[k+1] not in TENS and UNITS[tok[k+1]]<10:
+        v+=UNITS[tok[k+1]]/10; k+=2
+    elif k+2<n and tok[k:k+3]==["and","a","half"] and (k+3<n and (tok[k+3] in SCALES or tok[k+3] in ("dollars","bucks"))): v+=.5; k+=3
+    sc=None
+    if k<n and tok[k] in SCALES: sc=tok[k]; k+=1
+    return v,sc,dollar,k
+def _num(v):
+    return (f"{v:,.2f}".rstrip("0").rstrip(".") if v!=int(v) else f"{int(v):,}")
+def _money(v,sc,sign="$"):
+    if sc in ("million","billion"): return f"{sign}{v:g} {sc}"
+    return sign+_num(v*(SCALES[sc] if sc else 1))
+def _year(tok,i):
+    """Spoken year: nineteen ninety five, twenty twenty, two thousand eight. Returns (year, next index) or None."""
+    n=len(tok)
+    if i+1<n and tok[i] in ("nineteen","twenty"):
+        r=_say2(tok,i+1)
+        if r and r[0]>=10: return (19 if tok[i]=="nineteen" else 20)*100+r[0],r[1]
+    if i+2<n and tok[i]=="two" and tok[i+1]=="thousand":
+        m=i+3 if tok[i+2]=="and" else i+2; r=_say2(tok,m)
+        if r and r[0]<100 and not (r[1]<n and tok[r[1]] in ("dollars","bucks")): return 2000+r[0],r[1]
+    return None
+def numbers(pp,dry=False):
+    import shutil, time
+    p=json.load(open(pp)); W=p["words"]; out=[]; log=[]; left=[]; i=0
+    while i<len(W):
+        w=W[i]
+        if w.get("hide"): out.append(w); i+=1; continue
+        # a phrase can't run past a hidden word or past punctuation (the word that carries it ends the phrase)
+        tok=[]; j=i
+        while j<len(W) and not W[j].get("hide") and len(tok)<12:
+            for part in (_low(W[j]["w"]).split("-") if not re.search(r"\d",W[j]["w"]) else [_low(W[j]["w"])]): tok.append(part)
+            if re.search(r"[.?!,;:]$",W[j]["w"]): break
+            j+=1
+        hyph=[len(_low(x["w"]).split("-")) if not re.search(r"\d",x["w"]) else 1 for x in W[i:j+1]]
+        def span(k):   # tokens used -> words used; None when it would end in the middle of a hyphenated word
+            c=0
+            for q,h in enumerate(hyph):
+                c+=h
+                if c==k: return q+1
+                if c>k: return None
+            return None
+        text=None; used=0; emph=True
+        y=_year(tok,0)
+        if y: text=str(y[0]); used=y[1]
+        else:
+            a=_amount(tok,0)
+            if a:
+                v,sc,dl,k=a; nxt=tok[k] if k<len(tok) else None; prev=_low(W[i-1]["w"]) if i else ""
+                # "20 and 40 million dollars": the first amount takes the second one's unit
+                if sc is None and not dl and nxt in ("and","or","to") and k+1<len(tok):
+                    b=_amount(tok,k+1)
+                    if b and b[1] in ("million","billion"):
+                        k2=b[3]; un=k2<len(tok) and tok[k2] in ("dollars","bucks"); end=k2>=len(tok)
+                        if un or end or prev in COSTS:
+                            text=f"${v:g} {nxt} {_money(b[0],b[1])}"; used=k2+(1 if un else 0)
+                if text is None:
+                    if nxt in ("dollars","dollar","bucks","buck"): text=_money(v,sc); used=k+1
+                    elif nxt=="percent": text=_num(v)+"%"; used=k+1
+                    elif dl: text=_money(v,sc); used=k
+                    elif sc in ("million","billion") and (k>=len(tok) or prev in COSTS) and tok[0]!="a": text=_money(v,sc); used=k
+                    elif sc in ("million","billion") and tok[0]!="a": left.append(f"{w['s']:.1f}s: "+" ".join(tok[:k+2])+" (a price?)")
+                    elif re.fullmatch(r"(19|20)\d\d",tok[0]) and k==1: text=tok[0]; used=1
+                    elif sc or (not re.search(r"\d",tok[0]) and v>=100): left.append(f"{w['s']:.1f}s: "+" ".join(tok[:k+1]))
+        n=span(used) if text else None
+        if text and n:
+            g=W[i:i+n]; punct=re.search(r"[.?!,;:]*$",g[-1]["w"])[0]; new=text+punct
+            same=(n==1 and g[0]["w"]==new)
+            keep={k_:v_ for k_,v_ in g[0].items() if k_ not in ("w","s","e","emph")}
+            emph_=g[0].get("emph") if same and g[0].get("emph") else "num"
+            if not same or g[0].get("emph")!=emph_: log.append(f"{g[0]['s']:6.2f}s  {' '.join(x['w'] for x in g)}  ->  {new} [{emph_}]")
+            out.append(dict(keep,w=new,s=g[0]["s"],e=g[-1]["e"],emph=emph_)); i+=n; continue
+        out.append(w); i+=1
+    print("changed:" if log else "changed: nothing"); [print(" ",x) for x in log]
+    if left: print("left as spoken, read these in context:"); [print(" ",x) for x in left]
+    if not dry and log:
+        shutil.copy(pp,os.path.join(HERE,"tmp",f"{os.path.basename(pp)[:-5]}_before_numbers_{int(time.time())}.json"))
+        p["words"]=out; json.dump(p,open(pp,"w"),indent=1)
+    return out
 
 def pages(words):
     """Phrases split at punctuation and pauses >0.5s; at most 5 words per page; a keyword ends its page
@@ -119,7 +236,7 @@ def layout(page,S,F):
         tot=sum(wlen(w,s)[0] for w,s in r)+sp*(len(r)-1); fit.append(min(1.0,maxw/tot))
     ems=[max(em(s) for _,s in r)*k for r,k in zip(rows,fit)]
     if len(rows)==2:
-        small2=all(st=='small' for _,st in rows[1]); gap=(1.12 if small2 else 0.80)*ems[1]
+        small2=all(st=='small' for _,st in rows[1]); gap=(1.12 if small2 else 0.98 if any(st=='num' for _,st in rows[1]) else 0.80)*ems[1]
         B=[cy-gap/2+0.2*ems[0], cy+gap/2+0.2*ems[0]]
     else: B=[cy+0.25*ems[0]]
     out=[]
@@ -445,7 +562,8 @@ def assemble(pp,wd,out):
 
 if __name__=="__main__":
     cmd,pp=sys.argv[1],sys.argv[2]
-    if cmd=="plan":
+    if cmd=="numbers": numbers(pp,"--dry" in sys.argv)
+    elif cmd=="plan":
         S=load(pp)
         for a,b,g in paginate(S,Fonts(FONTDIR)): print(f"{a:6.2f} "+" ".join(w["w"]+("["+w["emph"]+"]" if w.get("emph") else "") for w in g))
         print("chunks",len(spans(S)))

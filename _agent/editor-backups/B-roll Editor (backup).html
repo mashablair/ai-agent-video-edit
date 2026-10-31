@@ -608,13 +608,13 @@ async function loadFonts(){
     try{const buf=await (await S.vid.file('_agent/fonts/'+f.file)).arrayBuffer();const ff=new FontFace('cap-'+f.key,buf);await ff.load();document.fonts.add(ff)}catch(e){console.warn('font',f.file,e)}}
 }
 const cfg=()=>S.proj.captions;
-const wText=(w,c)=>{let t=w.w||'';if(c.nopunct)t=t.replace(/[.,!?;:"“”]+/g,'').trim();if(c.upper)t=t.toUpperCase();return t};
+const wText=(w,c)=>{let t=w.w||'';if(c.nopunct)t=t.replace(/(?!(?<=\d)[.,]\d)[.,!?;:"“”]+/g,'').trim();if(c.upper)t=t.toUpperCase();return t};
 const GLO={small:['intertight-b',.068,'#FCFCFC'],big:['intertight-b',.13,'#FCFCFC'],neg:['intertight-bi',.12,'#FFFFFF',1],
-  serif:['instrument-i',.14,'#FCFCFC'],script:['yellowtail',.15,'#F2EC2E'],yellow:['intertight-b',.12,'#D9C933']};
+  serif:['instrument-i',.14,'#FCFCFC'],script:['yellowtail',.15,'#F2EC2E'],yellow:['intertight-b',.12,'#D9C933'],num:['intertight-b',.12,'#FFB000']};
 const isGlo=()=>S.proj&&cfg().engine==='glorious';
-const GDEF={gLine:0.72,gScriptColor:'#F2EC2E',gYellowColor:'#D9C933',gPad:0.06,gOutlineOn:false,gOutline:0.003,gOutlineColor:'#000000',gShadowOn:false,gShadow:0.003,gShadowBlur:0.006,gShadowOpacity:0.5};
+const GDEF={gLine:0.72,gScriptColor:'#F2EC2E',gYellowColor:'#D9C933',gNumColor:'#FFB000',gPad:0.06,gOutlineOn:false,gOutline:0.003,gOutlineColor:'#000000',gShadowOn:false,gShadow:0.003,gShadowBlur:0.006,gShadowOpacity:0.5};
 const gset=k=>{const c=cfg();return c[k]===undefined?GDEF[k]:c[k]};
-const gcolor=st=>st==='script'?gset('gScriptColor'):st==='yellow'?gset('gYellowColor'):st==='neg'?'#FFFFFF':(cfg().color||'#FCFCFC');
+const gcolor=st=>st==='script'?gset('gScriptColor'):st==='yellow'?gset('gYellowColor'):st==='num'?gset('gNumColor'):st==='neg'?'#FFFFFF':(cfg().color||'#FCFCFC');
 const gsize=st=>{const g=cfg().gSizes||{};return g[st]!==undefined?g[st]:GLO[st][1]};
 function gloRaw(){ // phrases -> pages (same rules as _agent/glorious.py)
   const c=cfg();const ws=S.proj.words.filter(w=>!w.hide&&w.w&&w.s>=c.start-1e-6);const P=[];let cur=[];
@@ -641,7 +641,7 @@ function gloHTML(ch,sw){
   const wl=(w,st)=>{_mc.font=`${em(st)}px 'cap-${GLO[st][0]}'`;return _mc.measureText(w.w).width-0.017*em(st)*w.w.length};
   const tot=r=>r.reduce((n,[w,st])=>n+wl(w,st),0)+sp*(r.length-1);
   return rows.map((r,ri)=>{const k=Math.min(1,maxw/tot(r)),eh=Math.max(...r.map(([w,st])=>em(st)))*k;
-    return `<span class="gl" style="line-height:${(ri?(r.every(([w,st])=>st==='small')?1.12:0.8):1.0)*eh}px">`+r.map(([w,st])=>{const g=GLO[st];
+    return `<span class="gl" style="line-height:${(ri?(r.every(([w,st])=>st==='small')?1.12:r.some(([w,st])=>st==='num')?0.98:0.8):1.0)*eh}px">`+r.map(([w,st])=>{const g=GLO[st];
       const fx=g[3]?'':(gset('gOutlineOn')?`-webkit-text-stroke:${2*gset('gOutline')*sw}px ${gset('gOutlineColor')};`:'')+(gset('gShadowOn')?`text-shadow:${gset('gShadow')*sw}px ${gset('gShadow')*sw}px ${gset('gShadowBlur')*sw*2}px rgba(0,0,0,${gset('gShadowOpacity')});`:'');
       return `<span class="gw${g[3]?' neg':''}" data-s="${w.s}" style="font-family:'cap-${g[0]}';font-size:${em(st)*k}px;letter-spacing:-0.017em;color:${gcolor(st)};${fx}">${escH(w.w)}</span>`}).join(`<span style="display:inline-block;width:${sp*k}px"></span>`)+'</span>'}).join('')}
 function gloDraw(t,ch){const box=$('#capBox'),st=$('#stage'),sw=st.clientWidth,sh=st.clientHeight,c=cfg();
@@ -752,7 +752,7 @@ function renderCapPanel(){
     we=`<div class="wordedit"><div class="row" style="margin:0 0 8px;justify-content:space-between"><b>Fix a word</b><span class="muted small">at ${fmt(w.s)}</span></div>
       <input id="weText" value="${escH(w.w)}" style="width:100%">
       <div class="row" style="justify-content:space-between;margin-bottom:0"><label class="tog" style="min-width:0"><input type="checkbox" id="weHide"${w.hide?' checked':''}> Leave out of captions</label><button id="weDone">Done</button></div>
-      <div class="row" style="margin:8px 0 0"><label style="min-width:0">Keyword style</label><select id="weEmph" style="flex:1">${[['','None'],['neg','Negative (inverted italic)'],['serif','Elegant serif'],['script','Yellow script'],['yellow','Mustard bold']].map(([v,l])=>`<option value="${v}"${(w.emph||'')===v?' selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="row" style="margin:8px 0 0"><label style="min-width:0">Keyword style</label><select id="weEmph" style="flex:1">${[['','None'],['neg','Negative (inverted italic)'],['serif','Elegant serif'],['script','Yellow script'],['yellow','Mustard bold'],['num','Number accent']].map(([v,l])=>`<option value="${v}"${(w.emph||'')===v?' selected':''}>${l}</option>`).join('')}</select></div>
       <div class="muted small" style="margin-top:4px">Keyword styles show with the Glorious preset.</div></div>`}
   P.innerHTML=`${we}
     <label class="bigtog"><input type="checkbox" data-k="enabled"${c.enabled?' checked':''}> Burn captions into the video</label>
@@ -777,9 +777,9 @@ ${c.engine==='glorious'?`    <h4>Glorious</h4>
     <div class="muted small">Inter Tight captions, centered, no outline. Each word slides in as she says it and the first word of each caption is supersized. To style a keyword, double-click it in the timeline and pick a <b>Keyword style</b>: negative (inverted italic), elegant serif, yellow script or mustard bold.</div>
     ${rng('yB','Height on B-roll',0.3,0.92,0.005)}
     <h4>Glorious sizes</h4>
-    ${[['small','Main text'],['big','First word'],['neg','Negative'],['serif','Serif'],['script','Script'],['yellow','Mustard']].map(([k,l])=>`<div class="ctl"><label>${l}</label><input type="range" data-gs="${k}" min="0.03" max="0.22" step="0.002" value="${gsize(k)}"><span class="out" data-gso="${k}">${Math.round(gsize(k)*1080)}</span></div>`).join('')}
+    ${[['small','Main text'],['big','First word'],['neg','Negative'],['serif','Serif'],['script','Script'],['yellow','Mustard'],['num','Numbers']].map(([k,l])=>`<div class="ctl"><label>${l}</label><input type="range" data-gs="${k}" min="0.03" max="0.22" step="0.002" value="${gsize(k)}"><span class="out" data-gso="${k}">${Math.round(gsize(k)*1080)}</span></div>`).join('')}
     <h4>Colors</h4>
-    <div class="ctl"><label>Main text</label><input type="color" data-gcol="color" value="${c.color||'#FCFCFC'}"><span style="flex:1"></span><label style="width:auto">Script</label><input type="color" data-gcol="gScriptColor" value="${gset('gScriptColor')}"><label style="width:auto;margin-left:8px">Mustard</label><input type="color" data-gcol="gYellowColor" value="${gset('gYellowColor')}"></div>
+    <div class="ctl"><label>Main text</label><input type="color" data-gcol="color" value="${c.color||'#FCFCFC'}"><span style="flex:1"></span><label style="width:auto">Script</label><input type="color" data-gcol="gScriptColor" value="${gset('gScriptColor')}"><label style="width:auto;margin-left:8px">Mustard</label><input type="color" data-gcol="gYellowColor" value="${gset('gYellowColor')}"><label style="width:auto;margin-left:8px">Numbers</label><input type="color" data-gcol="gNumColor" value="${gset('gNumColor')}"></div>
     <h4>Line width</h4>
     <div class="ctl"><label>Max line</label><input type="range" data-g="gLine" min="0.4" max="0.95" step="0.01" value="${gset('gLine')}"><span class="out" data-go="gLine">${Math.round(gset('gLine')*100)}%</span></div>
     <div class="muted small">Words wrap onto a second line past this width; a caption never gets more than 2 lines (the rest moves to the next caption).</div>

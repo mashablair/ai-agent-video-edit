@@ -20,7 +20,7 @@ def cfg_of(p):
 
 def word_text(w, c):
     t = w.get("w", "")
-    if c["nopunct"]: t = re.sub(r"[.,!?;:\"“”]+", "", t).strip()
+    if c["nopunct"]: t = re.sub(r"(?!(?<=\d)[.,]\d)[.,!?;:\"“”]+", "", t).strip()
     if c["upper"]: t = t.upper()
     return t
 
