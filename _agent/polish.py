@@ -557,7 +557,9 @@ def _r2c(x,L,o):
 def remap(projpath,brollpath):
     """After a re-cut: move the visuals (captions words, B-roll, cards, zooms, hook) from the old clean timeline to the new one."""
     import shutil, time
-    P=J(projpath); B=J(brollpath); old,new=P["renderedKeep"],P["keep"]; oo,on=_offs(old),_offs(new)
+    P=J(projpath); B=J(brollpath); old,new=B.get("cutKeep") or P["renderedKeep"],P["keep"]; oo,on=_offs(old),_offs(new)
+    if len(old)==len(new) and all(abs(x-y)<5e-4 for o,n in zip(old,new) for x,y in zip(o,n)):   # the Video Editor already laid the visuals out on this cut
+        P["renderedKeep"]=new; W_(projpath,P); print("visuals already match this cut (edited in the Video Editor); nothing to move"); return
     shutil.copy(brollpath,f"{DEFAULT_TOOLS}/tmp/{os.path.basename(brollpath)[:-5]}_before_recut_{int(time.time())}.json")
     def mp(t): return _r2c(_c2r(t,old,oo),new,on)
     inold=lambda x: any(a<=x<b for a,b in old); innew=lambda x: any(a<=x<b for a,b in new)
@@ -583,7 +585,7 @@ def remap(projpath,brollpath):
         B[key]=keepi
     if B.get("hook"): B["hook"]["a"]=round(mp(B["hook"]["a"])[0],3); B["hook"]["b"]=round(mp(B["hook"]["b"])[0],3)
     if B.get("whipAt"): B["whipAt"]=[round(mp(t)[0],3) for t in B["whipAt"]]
-    B["duration"]=round(on[-1],3); B["status"]="edited"
+    B["duration"]=round(on[-1],3); B["status"]="edited"; B["cutKeep"]=new
     W_(brollpath,B); P["renderedKeep"]=new; W_(projpath,P)
     print(f"visuals moved to the new cut ({oo[-1]:.2f}s -> {on[-1]:.2f}s). caption words removed: {lost or 'none'}; added: {added or 'none'}")
     for x in flags: print(" !",x)

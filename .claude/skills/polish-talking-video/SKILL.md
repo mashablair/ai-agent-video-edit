@@ -72,6 +72,7 @@ Each chat gets a fresh workspace on her Mac, so load the tools from here instead
 - **Save** writes `keep` (the kept pieces in raw time, 0.1 ms precision), `ignored` and `status:"edited"` into the cut project.
 
 ## "Render my cuts for <name>"
+If she edited in the Video Editor (`Editors/Video Editor.html`; the visuals project has `cutKeep`), use the glorious-visuals skill's one command, `_agent/render_edits.py <name>`, instead: it renders the cuts and the visuals together. The steps below are for the separate Cut Editor.
 1. Read `Videos/<name>/editor files/<name>_cut_project.json` (status should be `edited`). Compare `keep` with `renderedKeep` so you can tell her what changed (which joins moved, words cut or restored).
 2. `python3 ~/vidpolish/polish.py fromcut "<her folder>/Videos/<name>/editor files/<name>_cut_project.json" ~/vp/<name>_cut` (sets up a work dir with her exact pieces), then `plan`, `audio`, all `chunk`s, `assemble`, `qa` on that work dir as usual. Her cuts are rendered as-is; don't "improve" them. If qa still finds a leftover filler, mention it rather than cutting it.
 3. **If a visuals project exists** (`Videos/<name>/editor files/<name>_broll_project.json`), do this BEFORE step 4 (it needs the old `renderedKeep`): `python3 ~/vidpolish/polish.py remap "<her folder>/Videos/<name>/editor files/<name>_cut_project.json" "<her folder>/Videos/<name>/editor files/<name>_broll_project.json"`. It moves caption words, B-roll slots, cards, zooms and the hook from the old clean timeline to the new one (backup in `_agent/tmp/`), drops caption words that were cut, adds restored words, and flags slots/cards whose edges landed on cut material. Set the visuals project's `video` to the new clean file, tell her what moved or was flagged, and offer to re-render the Glorious version.
@@ -675,7 +676,9 @@ def _r2c(x,L,o):
 def remap(projpath,brollpath):
     """After a re-cut: move the visuals (captions words, B-roll, cards, zooms, hook) from the old clean timeline to the new one."""
     import shutil, time
-    P=J(projpath); B=J(brollpath); old,new=P["renderedKeep"],P["keep"]; oo,on=_offs(old),_offs(new)
+    P=J(projpath); B=J(brollpath); old,new=B.get("cutKeep") or P["renderedKeep"],P["keep"]; oo,on=_offs(old),_offs(new)
+    if len(old)==len(new) and all(abs(x-y)<5e-4 for o,n in zip(old,new) for x,y in zip(o,n)):   # the Video Editor already laid the visuals out on this cut
+        P["renderedKeep"]=new; W_(projpath,P); print("visuals already match this cut (edited in the Video Editor); nothing to move"); return
     shutil.copy(brollpath,f"{DEFAULT_TOOLS}/tmp/{os.path.basename(brollpath)[:-5]}_before_recut_{int(time.time())}.json")
     def mp(t): return _r2c(_c2r(t,old,oo),new,on)
     inold=lambda x: any(a<=x<b for a,b in old); innew=lambda x: any(a<=x<b for a,b in new)
@@ -701,7 +704,7 @@ def remap(projpath,brollpath):
         B[key]=keepi
     if B.get("hook"): B["hook"]["a"]=round(mp(B["hook"]["a"])[0],3); B["hook"]["b"]=round(mp(B["hook"]["b"])[0],3)
     if B.get("whipAt"): B["whipAt"]=[round(mp(t)[0],3) for t in B["whipAt"]]
-    B["duration"]=round(on[-1],3); B["status"]="edited"
+    B["duration"]=round(on[-1],3); B["status"]="edited"; B["cutKeep"]=new
     W_(brollpath,B); P["renderedKeep"]=new; W_(projpath,P)
     print(f"visuals moved to the new cut ({oo[-1]:.2f}s -> {on[-1]:.2f}s). caption words removed: {lost or 'none'}; added: {added or 'none'}")
     for x in flags: print(" !",x)

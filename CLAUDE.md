@@ -12,7 +12,7 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 |---|---|---|
 | `Drop raw videos here/` | hers | Raw videos she drops in. Never modify, move or delete them; she clears this folder herself. |
 | `Videos/<name>/` | hers (generated) | **Everything made for one video**, so she can delete the whole folder when done: `<name>_clean.mp4`, `_glorious.mp4`, cutlists, transcripts, lists, and `editor files/` (`<name>_cut_project.json`, `<name>_broll_project.json`, `proxy.mp4`, `voice.wav`). `<name>` = the raw file's stem (e.g. `IMG_0666`). |
-| `Editors/` | hers | `Cut Editor.html` and `B-roll Editor.html` (Chrome only; never treat them as videos). They open the main folder and find projects in `Videos/*/editor files/`. Backups in `_agent/editor-backups/`. |
+| `Editors/` | hers | `Video Editor.html` (her main editor since 2026-11-04: cuts + B-roll + captions in one, saves both projects), plus `Cut Editor.html` (detailed cut work) and `B-roll Editor.html` (Chrome only; never treat them as videos). They open the main folder and find projects in `Videos/*/editor files/`. Backups in `_agent/editor-backups/`. |
 | `_agent/` | agent's, **never deleted** | Scripts (`polish.py`, `glorious.py`, `captions.py`, `rvm_mask.py`), models, fonts, caption presets, text-card refs, `VERSION.txt`, `VIDEO_EDITING_HANDOFF.md`, `tmp/` (superseded versions, backups, `_to_delete/`). Was `_tools/` before 2026-10-27. |
 | `CLAUDE.md`, `AGENTS.md`, `.claude/` | agent's | Must stay at the top level. |
 - Never write generated files anywhere else in her folder (no files at the top level, no `edited/`). If a video has no `Videos/<name>/` yet, create it.
@@ -26,7 +26,7 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 | She says | Skill |
 |---|---|
 | "clean up / polish <video>", "render my cuts for <name>" | `polish-talking-video` (step 1: cuts and studio voice only) |
-| "add the visuals / Glorious look to <name>", "render my edits for <name>" | `glorious-visuals` (step 2: captions, zooms, B-roll, hook, cards) |
+| "add the visuals / Glorious look to <name>", "render my edits for <name>" | `glorious-visuals` (step 2: captions, zooms, B-roll, hook, cards). Edits from the Video Editor render with one command: `_agent/render_edits.py <name>` |
 | "just add B-roll to <name>" | `add-broll-to-video` (older, simpler B-roll-only path) |
 | "update the B-roll library" | `update-broll-library` |
 

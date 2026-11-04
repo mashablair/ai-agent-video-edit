@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Video Editor (test)</title>
+<title>Video Editor</title>
 <style>
 :root{
   --bg:#111314; --panel:#17191b; --panel2:#1e2124; --line:#2a2e32; --text:#eef0f2; --mute:#8b939b;
@@ -61,6 +61,23 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
 .pane{display:none;flex-direction:column;min-height:0;flex:1}
 .pane.on{display:flex}
 #paneCap{overflow:auto;padding:14px;display:none}
+#paneCut{overflow:hidden;display:none;flex-direction:column}
+#paneCut.on{display:flex}
+#cutHead{padding:12px 14px;border-bottom:1px solid var(--line);font-size:13px}
+#cutHead b{color:var(--text)}
+#cutAct{padding:10px 14px;border-bottom:1px solid var(--line);min-height:52px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+#cutText{overflow:auto;padding:12px 14px;line-height:1.9;font-size:14.5px;flex:1;user-select:none}
+#cutText p{margin:0 0 10px}
+#cutText .cw{cursor:pointer;border-radius:4px;padding:1px 0}
+#cutText .cw:hover{background:var(--panel2)}
+#cutText .cw.x{color:#6d747b;text-decoration:line-through}
+#cutText .cw.sel{background:var(--accent);color:var(--accent-ink);text-decoration:none}
+#cutText .cw.now{color:var(--accent)}
+#cutText .cw.sel.now{color:var(--accent-ink)}
+#cutText .why{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#c9a227;margin-right:3px;text-decoration:none;display:inline-block}
+#cutText .jn{display:inline-block;width:9px;height:17px;vertical-align:-3px;margin:0 2px;border-left:2px solid #5a6168;cursor:pointer}
+#cutText .jn:hover,#cutText .jn.on{border-color:var(--accent)}
+#cutBan{margin:10px 14px 0;padding:8px 10px;border-radius:8px;background:rgba(244,162,97,.12);color:var(--warn);font-size:13px;display:none}
 #paneCap.on{display:block}
 #paneCap h4{margin:16px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
 .presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -156,13 +173,13 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
 <body>
 <div class="app">
   <header>
-    <span class="brand">Video Editor <span style="color:var(--warn)">(test: playback only, nothing is saved)</span></span>
-    <a href="Cut Editor.html" target="_blank" title="Fix the cleanup cuts (clipped words, leftover ums)" style="text-decoration:none"><button>✂ Fix cuts</button></a>
+    <span class="brand">Video Editor</span>
+    <a href="Cut Editor.html" target="_blank" title="Detailed cut work: waveform, edge handles, things to check. Save there, then reopen this video here." style="text-decoration:none"><button>Detailed cuts ↗</button></a>
     <select id="projSel" title="Video"></select>
     <span class="grow" id="status"></span>
     <button class="icon" id="undoBtn" title="Undo (⌘Z)">↶</button>
     <button class="icon" id="redoBtn" title="Redo (⇧⌘Z)">↷</button>
-    <button id="saveBtn" disabled title="This test version never saves">Saving is off</button>
+    <button id="saveBtn" class="primary" title="Save (⌘S)">Save</button>
   </header>
   <main>
     <section id="stageWrap">
@@ -183,11 +200,13 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
         <label class="tog"><input type="checkbox" id="capTog"> Captions</label>
         <label class="tog" style="display:none" title="Playback speed of the finished video (the preview plays at this speed too)">Speed <select id="spdSel"><option value="1">1x</option><option value="1.1">1.1x</option><option value="1.2">1.2x</option><option value="1.3">1.3x</option></select></label>
         <span class="muted small" id="spdInfo"></span>
-        <span id="hud"></span><button id="hudCopy" title="Copy these numbers to paste to Claude">Copy numbers</button><button id="hudReset">Reset</button>
+        <span id="hud" style="display:none"></span><button id="hudCopy" style="display:none">Copy numbers</button><button id="hudReset" style="display:none">Reset</button>
       </div>
     </section>
     <aside>
-      <div id="tabs"><button data-tab="broll" class="on">B-roll</button><button data-tab="cap">Captions</button></div>
+      <div id="tabs"><button data-tab="cut">Cut</button><button data-tab="broll" class="on">B-roll</button><button data-tab="cap">Captions</button></div>
+      <div id="paneCut"><div id="cutBan"></div><div id="cutHead"></div><div id="cutAct"></div><div id="cutText"></div>
+        <div class="muted small" style="padding:8px 14px;border-top:1px solid var(--line)">Click a word to jump there. Drag across words to select. <kbd>⌫</kbd> cut · <kbd>R</kbd> restore · click a <span style="border-left:2px solid #5a6168;padding-left:3px">join</span> to shorten or lengthen its pause. Captions and B-roll move with your cuts.</div></div>
       <div class="pane on" id="paneBroll">
         <div id="inspector"></div>
         <div id="lib">
@@ -315,14 +334,15 @@ const main=(()=>{
     addEventListener(n,f){(L[n]=L[n]||[]).push(f)},
     async load(cutFile){const c=JSON.parse(await (await S.vid.file(cutFile)).text());S.cut=c;
       if(P.paused===false)P.pause();
-      setPieces(c.renderedKeep||c.keep);
+      setPieces(S.keep);
       if(!ctx)ctx=new AudioContext({sampleRate:48000});
       buf=await ctx.decodeAudioData(await (await S.vid.file(c.voice)).arrayBuffer());
       const url=URL.createObjectURL(await S.vid.file(c.proxy));
       V.forEach(v=>{v.src=url;v._i=null;v._go=false});
       await Promise.all(V.map(v=>new Promise(r=>{if(v.readyState>=1)r();else v.onloadedmetadata=r})));
       P.t=0;cur=0;showing=null;V[0]._i=0;show(V[0]);V[0].currentTime=K.length?K[0][0]:0;st=newStats()},
-    stats:()=>st,reset(){st=newStats();lastFrame=0;renderStats()},pieces:()=>K.length,segCount:()=>segs.length,e2r};
+    setKeep(k,at){if(!P.paused)P.pause();setPieces(k);V.forEach(v=>{v._i=null;v._go=false});showing=null;P.t=Math.max(0,Math.min(total(),at||0));cur=segAt(P.t);V[0]._i=cur;show(V[0]);V[0].currentTime=e2r(P.t)},
+    stats:()=>st,reset(){st=newStats();lastFrame=0;renderStats()},pieces:()=>K.length,segCount:()=>segs.length,e2r,r2e};
   return P})();
 function renderStats(){const s=main.stats(),el=$('#hud');if(!el)return;
   el.textContent=`${s.cuts} cuts played · ${s.late} late · ${s.stutters} stutters · worst gap ${Math.round(s.gapMax)} ms · sync off ${s.frames?Math.round(s.syncSum/s.frames*1000):0} ms`}
@@ -340,7 +360,7 @@ function handleFS(dir){
     async has(path){try{await this.file(path);return true}catch{return false}},
     async list(sub){const out=[];const d=await walk(sub.split('/').filter(Boolean),false);for await(const [n,h] of d.entries())if(h.kind==='file')out.push(n);return out},
     async dirs(sub){const out=[];const d=await walk(sub.split('/').filter(Boolean),false);for await(const [n,h] of d.entries())if(h.kind==='directory')out.push(n);return out},
-    async write(){throw new Error('This test version never saves')}};
+    async write(path,text){const p=path.split('/');const d=await walk(p.slice(0,-1),true);const fh=await d.getFileHandle(p.at(-1),{create:true});const w=await fh.createWritable();await w.write(text);await w.close();return true}};
 }
 function listFS(files){
   const m={};let root='';
@@ -350,10 +370,10 @@ function listFS(files){
     async has(p){return !!m[p]},
     async list(sub){const pre=sub.replace(/\/?$/,'/');return Object.keys(m).filter(k=>k.startsWith(pre)&&!k.slice(pre.length).includes('/')).map(k=>k.slice(pre.length))},
     async dirs(sub){const pre=sub.replace(/\/?$/,'/');const ks=Object.keys(m).filter(k=>k.startsWith(pre)&&k.slice(pre.length).includes('/'));if(!ks.length)throw new Error('Not found: '+sub);return [...new Set(ks.map(k=>k.slice(pre.length).split('/')[0]))]},
-    async write(){throw new Error('This test version never saves')}};
+    async write(path,text){download(path.split('/').pop(),text);return false}};
 }
 const idb={db:null,
-  async open(){if(this.db)return this.db;this.db=await new Promise((res,rej)=>{const r=indexedDB.open('broll-editor',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});return this.db},
+  async open(){if(this.db)return this.db;this.db=await new Promise((res,rej)=>{const r=indexedDB.open('video-editor',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});return this.db},
   async get(k){try{const db=await this.open();return await new Promise(r=>{const q=db.transaction('h').objectStore('h').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch{return null}},
   async set(k,v){try{const db=await this.open();db.transaction('h','readwrite').objectStore('h').put(v,k)}catch{}}};
 const canPick=!!window.showDirectoryPicker;
@@ -372,7 +392,7 @@ async function useFS(which,fs){
 }
 async function pick(which){
   if(!canPick){$('#in-'+which).click();return}
-  try{const h=await showDirectoryPicker({id:'broll-'+which,mode:'readwrite'});if(await useFS(which,handleFS(h)))idb.set(which,h)}
+  try{const h=await showDirectoryPicker({id:'video-'+which,mode:'readwrite'});if(await useFS(which,handleFS(h)))idb.set(which,h)}
   catch(e){if(e.name!=='AbortError')toast(e.message)}
 }
 async function connectBtn(which){
@@ -416,11 +436,14 @@ async function loadProject(f){
   const stem=S.proj.video.split('/').pop().replace(/\.[^.]+$/,'').replace(/\(\d+\)$/,'');
   const prior=S.usage.filter(l=>!l.includes(stem));const last=prior.at(-1)||'';
   S.lastUsed=new Set((last.split(':').slice(1).join(':')).split(',').map(s=>s.trim()).filter(Boolean));
-  const w=S.proj.words;S.finalStart=S.proj.duration;
-  for(let i=w.length-2;i>=0;i--){if(/[.!?]$/.test(w[i].w)){S.finalStart=w[i+1].s;break}}
+  finalStart();
   toast('Loading the video and voice…',15000);
-  try{await main.load(f.replace('_broll_project.json','_cut_project.json'));$('#toast').style.display='none'}catch(e){toast('Couldn’t load this video’s editor files: '+e.message,8000)}
-  lastChunk=null;renderAll();setStatus();applyCapStyle();drawCaption(0);applySpeed();
+  S.cutFile=f.replace('_broll_project.json','_cut_project.json');
+  try{S.cut=JSON.parse(await (await S.vid.file(S.cutFile)).text());S.keep=cloneK(S.proj.cutKeep||S.cut.renderedKeep||S.cut.keep);
+    S.rawOK=await S.vid.has(S.cut.src);await main.load(S.cutFile);$('#toast').style.display='none'}catch(e){toast('Couldn’t load this video’s editor files: '+e.message,8000);return}
+  S.csel=null;S.cjoin=null;lastChunk=null;
+  if(!sameK(S.keep,S.cut.keep)){const r=applyKeep(S.cut.keep,0);S.dirty=true;toast(`Brought in the cuts you saved in the detailed cut editor${r.msg}. Save to keep them.`,8000)}
+  renderAll();renderCut();setStatus();applyCapStyle();drawCaption(0);applySpeed();
 }
 async function clipURL(id){if(!S.urls[id])S.urls[id]=URL.createObjectURL(await S.lib.file('clips/'+id+'.mp4'));return S.urls[id]}
 async function thumbURL(id){if(!S.thumbs[id]){try{S.thumbs[id]=URL.createObjectURL(await S.lib.file('_catalog/thumbs/'+id+'.jpg'))}catch{S.thumbs[id]=''}}return S.thumbs[id]}
@@ -428,10 +451,10 @@ async function thumbURL(id){if(!S.thumbs[id]){try{S.thumbs[id]=URL.createObjectU
 /* ---------- state helpers ---------- */
 const slots=()=>S.proj?S.proj.slots:[];
 const dur=()=>S.proj?(S.proj.duration||main.duration||0):0;
-function snapshot(){return JSON.stringify({slots:slots(),captions:S.proj.captions,words:S.proj.words,zooms:S.proj.zooms||[],tiles:S.proj.tiles||[],hook:S.proj.hook||null,speed:S.proj.speed||1})}
+function snapshot(){return JSON.stringify({keep:S.keep,duration:S.proj.duration,slots:slots(),captions:S.proj.captions,words:S.proj.words,zooms:S.proj.zooms||[],tiles:S.proj.tiles||[],hook:S.proj.hook||null,speed:S.proj.speed||1})}
 function pushUndo(){S.undo.push(snapshot());if(S.undo.length>200)S.undo.shift();S.redo=[]}
-function restore(js){const i=S.sel?slots().indexOf(S.sel):-1;const o=JSON.parse(js);S.proj.slots=o.slots;S.proj.captions=o.captions;S.proj.words=o.words;S.proj.zooms=o.zooms||[];S.proj.tiles=o.tiles||[];S.proj.hook=o.hook||undefined;if(o.speed&&o.speed!==1)S.proj.speed=o.speed;else delete S.proj.speed;applySpeed();
-  S.sel=S.proj.slots[i]||null;S.capCache=null;$('#capTog').checked=!!S.proj.captions.enabled;markDirty();applyCapStyle();sync()}
+function restore(js){const i=S.sel?slots().indexOf(S.sel):-1;const o=JSON.parse(js);if(o.keep&&!sameK(o.keep,S.keep)){S.keep=o.keep;S.proj.duration=o.duration;main.setKeep(S.keep,Math.min(main.currentTime,o.duration));S.csel=null;S.cjoin=null;finalStart()}S.proj.slots=o.slots;S.proj.captions=o.captions;S.proj.words=o.words;S.proj.zooms=o.zooms||[];S.proj.tiles=o.tiles||[];S.proj.hook=o.hook||undefined;if(o.speed&&o.speed!==1)S.proj.speed=o.speed;else delete S.proj.speed;applySpeed();
+  S.sel=S.proj.slots[i]||null;S.capCache=null;lastChunk=null;$('#capBox').dataset.key='';$('#capTog').checked=!!S.proj.captions.enabled;markDirty();renderCut();applyCapStyle();sync()}
 function beginEdit(){if(S.editing===null&&S.proj)S.editing=snapshot()}
 function endEdit(){if(S.editing!==null){const now=snapshot();if(now!==S.editing){S.undo.push(S.editing);S.redo=[]}S.editing=null;setStatus()}}
 function undo(){if(!S.undo.length)return;S.redo.push(snapshot());restore(S.undo.pop())}
@@ -440,7 +463,7 @@ function markDirty(){S.dirty=true;slots().forEach(s=>s.line=lineFor(s.a,s.b));sl
 function setStatus(){const st=$('#status');
   if(!S.proj){st.textContent='';return}
   st.className=S.dirty?'dirty':'';
-  st.textContent=S.dirty?'Unsaved changes':(S.proj.status==='edited'?'Edits saved. Ask Claude to render them':'Matches the rendered video: '+(S.proj.rendered||'').split('/').pop());
+  st.textContent=S.dirty?'Unsaved changes':(S.proj.status==='edited'||(S.cut&&S.cut.status==='edited')?`Saved. Ask Claude: “render my edits for ${pname(S.projFile,'_broll_project.json')}”`:'Matches the rendered video: '+(S.proj.rendered||'').split('/').pop());
   $('#undoBtn').disabled=!S.undo.length;$('#redoBtn').disabled=!S.redo.length}
 function lineFor(a,b){return S.proj.words.filter(w=>w.s>=a-0.05&&w.s<b).map(w=>w.w).join(' ')}
 function neighbors(s){const L=slots().filter(x=>x!==s);let lo=0,hi=dur();for(const x of L){if(x.b<=s.a+1e-6)lo=Math.max(lo,x.b);if(x.a>=s.b-1e-6)hi=Math.min(hi,x.a)}return{lo,hi}}
@@ -642,7 +665,7 @@ $('#wordsTrack').ondblclick=e=>{const w=e.target.closest('.w');if(!w)return;S.wo
   setTimeout(()=>{const i=$('#weText');if(i){i.focus();i.select()}},0)};
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setTab(t){S.tab=t;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
-  $('#paneBroll').classList.toggle('on',t==='broll');$('#paneCap').classList.toggle('on',t==='cap');if(t==='cap')renderCapPanel()}
+  $('#paneBroll').classList.toggle('on',t==='broll');$('#paneCap').classList.toggle('on',t==='cap');$('#paneCut').classList.toggle('on',t==='cut');if(t==='cap')renderCapPanel();if(t==='cut')renderCut()}
 
 /* ---------- playback & preview sync ---------- */
 function applySpeed(){const v=1; // test plays at 1x only
@@ -668,6 +691,7 @@ function updatePlayhead(){
   $('#time').textContent=fmt(t)+' / '+fmt(dur());
   const now=document.querySelector('.w.now');if(now)now.classList.remove('now');
   if(S.proj){const i=S.proj.words.findIndex(w=>t>=w.s&&t<w.e);if(i>=0){const el=document.querySelector(`.w[data-i="${i}"]`);if(el)el.classList.add('now')}}
+  if(S.tab==='cut'&&S.cut)cutNow(t);
 }
 (function tick(){
   if(S.proj&&!main.paused){
@@ -955,16 +979,145 @@ ${c.engine==='glorious'?`    <h4>Glorious</h4>
 }
 function seekIfOutside(t){if(Math.abs(main.currentTime-t)>0.3)seek(t+0.02)}
 
+/* ---------- cuts ----------
+   S.keep = the kept pieces of the RAW take (same format as the cut project's "keep"). The player plays exactly
+   these pieces, and every visual (caption words, B-roll, cards, zooms, hook) lives on the timeline they make.
+   A cut edit computes new pieces (same natural-break rules as the Cut Editor and polish.py), then moves the
+   visuals from the old timeline to the new one (same rules as polish.py remap). */
+const cloneK=K=>(K||[]).map(k=>[k[0],k[1]]);
+const sameK=(a,b)=>!!a&&!!b&&a.length===b.length&&a.every((k,i)=>Math.abs(k[0]-b[i][0])<5e-4&&Math.abs(k[1]-b[i][1])<5e-4);
+const klen=K=>K.reduce((n,k)=>n+k[1]-k[0],0);
+const koffs=K=>{const o=[0];for(const [s,e] of K)o.push(o.at(-1)+e-s);return o};
+function finalStart(){const w=S.proj.words;S.finalStart=S.proj.duration;for(let i=w.length-2;i>=0;i--){if(/[.!?]$/.test(w[i].w)){S.finalStart=w[i+1].s;break}}}
+const CQUIET=-42;
+const CW=()=>S.cut.words;
+const lvR=t=>{const d=S.cut.db;return d[Math.min(d.length-1,Math.max(0,Math.floor(t*100+1e-6)))]};
+const wmid=w=>(w.s+Math.min(w.e,w.s+0.6))/2;
+function pieceIn(K,t){let lo=0,hi=K.length-1;while(lo<=hi){const m=(lo+hi)>>1;if(t<K[m][0])hi=m-1;else if(t>=K[m][1])lo=m+1;else return m}return -1}
+function r2eK(K,t){const o=koffs(K);for(let k=0;k<K.length;k++){if(t<K[k][0])return o[k];if(t<K[k][1])return o[k]+t-K[k][0]}return o.at(-1)}
+function cwordAt(t){const W=CW();let lo=0,hi=W.length-1,r=0;while(lo<=hi){const m=(lo+hi)>>1;if(W[m].s<=t){r=m;lo=m+1}else hi=m-1}return r}
+function quietRuns(a,b){const R=[];let i=Math.ceil(a*100),j=Math.floor(b*100),st=-1;for(;i<=j;i++){const q=S.cut.db[i]<CQUIET;if(q&&st<0)st=i;if(!q&&st>=0){if(i-st>=3)R.push([st/100,i/100]);st=-1}}if(st>=0&&j+1-st>=3)R.push([st/100,(j+1)/100]);return R}
+/* natural break between word p and q=p+1 (copied from the Cut Editor): 90 ms tail after a phrase, 60 ms lead before the next; no silence -> the quietest point */
+function boundary(p,q){const W=CW(),n=W.length,D=S.cut.dur;
+  if(p<0){const q0=W[q].s,R=quietRuns(Math.max(0,q0-1.2),q0+0.06);return{L:0,R:R.length?Math.max(R.at(-1)[0],R.at(-1)[1]-0.06):Math.max(0,q0-0.08)}}
+  if(q>=n){const R=quietRuns(W[p].s+0.08,D);return{L:R.length?Math.min(R[0][1],R[0][0]+0.09):D,R:D}}
+  const span=W[q].s-W[p].s,lo=W[p].s+Math.max(0.08,0.5*span),hi=W[q].s+0.06;
+  const R=quietRuns(lo,hi);
+  if(R.length){const [a,b]=R.at(-1);return{L:a+Math.min(0.09,b-a),R:b-Math.min(0.06,b-a)}}
+  let best=Math.max(lo,W[q].s-0.2);for(let t=best;t<=hi;t+=0.01)if(lvR(t)<lvR(best))best=t;
+  const m=Math.round((best+0.005)*1000)/1000;return{L:m,R:m}}
+function normKeep(K){const D=S.cut.dur;K=K.filter(k=>k[1]-k[0]>0.03).map(k=>[Math.max(0,+k[0].toFixed(4)),Math.min(D,+k[1].toFixed(4))]).sort((a,b)=>a[0]-b[0]);const o=[];
+  for(const k of K){if(o.length&&k[0]<=o.at(-1)[1]+0.0005)o.at(-1)[1]=Math.max(o.at(-1)[1],k[1]);else o.push(k)}return o}
+function subtractK(K,a,b){const o=[];for(const [s,e] of K){if(e<=a||s>=b)o.push([s,e]);else{if(s<a)o.push([s,a]);if(e>b)o.push([b,e])}}return o}
+function cutWordsK(K,i,j){const W=CW(),n=W.length;const a=i>0?boundary(i-1,i).L:0,b=j<n-1?boundary(j,j+1).R:S.cut.dur;return subtractK(K,Math.min(a,W[i].s),Math.max(b,a+0.02))}
+function restoreWordsK(K,i,j){const W=CW(),n=W.length;const a=boundary(i-1,i).R,b=boundary(j,j+1<=n?j+1:n).L;return K.concat([[Math.min(a,W[i].s),Math.max(b,W[j].s+0.1)]])}
+function joinPause(K,k){let t=K[k][1];while(t>K[k][0]&&lvR(t-0.01)<CQUIET)t-=0.01;let u=K[k+1][0];while(u<K[k+1][1]&&lvR(u)<CQUIET)u+=0.01;return{tail:K[k][1]-t,head:u-K[k+1][0]}}
+function longerK(K,k){const W=CW(),need=0.05,qn=cwordAt(K[k][1]+0.02),lim=Math.min(K[k+1][0],(W[qn]&&W[qn].s>K[k][1])?W[qn].s-0.02:K[k+1][0]);
+  let e=K[k][1],got=0;while(got<need*0.6&&e+0.01<=lim&&lvR(e)<CQUIET){e+=0.01;got+=0.01}
+  let s=K[k+1][0];const pw=cwordAt(s-0.02),lo=Math.max(e,W[pw]&&W[pw].s<s?boundary(pw,pw+1).L:e);
+  while(got<need&&s-0.01>=lo&&lvR(s-0.01)<CQUIET){s-=0.01;got+=0.01}
+  if(got<0.02)return null;K[k][1]=+e.toFixed(3);K[k+1][0]=+s.toFixed(3);return K}
+function shorterK(K,k){const {tail,head}=joinPause(K,k);if(tail+head<0.04)return null;
+  if(tail>=head)K[k][1]=+(K[k][1]-Math.min(0.03,tail-0.01)).toFixed(3);else K[k+1][0]=+(K[k+1][0]+Math.min(0.03,head-0.01)).toFixed(3);return K}
+
+/* move every visual from the timeline of pieces `old` to the timeline of pieces `nw` (port of polish.py remap) */
+function remapVisuals(old,nw){const oo=koffs(old),on=koffs(nw),P=S.proj;
+  const c2r=t=>{for(let k=0;k<old.length;k++)if(t<oo[k+1]||k===old.length-1)return old[k][0]+Math.min(Math.max(t-oo[k],0),old[k][1]-old[k][0]);return 0};
+  const r2c=x=>{for(let k=0;k<nw.length;k++){if(x<nw[k][0])return[on[k],false];if(x<nw[k][1])return[on[k]+x-nw[k][0],true]}return[on.at(-1),false]};
+  const mp=t=>r2c(c2r(t)),r3=x=>Math.round(x*1000)/1000;
+  const inold=x=>pieceIn(old,x)>=0,innew=x=>pieceIn(nw,x)>=0;
+  const words=[],lost=[],added=[],flags=[];
+  for(const w of P.words){const mid=c2r((w.s+w.e)/2);if(!innew(mid)){lost.push(w.w);continue}
+    const s=mp(w.s)[0],e=mp(w.e)[0];words.push(Object.assign({},w,{s:r3(s),e:r3(Math.max(e,s+0.05))}))}
+  for(const w of CW()){const mid=wmid(w);if(innew(mid)&&!inold(mid)){const s=r2c(Math.max(w.s,mid-0.3))[0],e=r2c(Math.min(w.e,mid+0.3))[0];
+    words.push({w:w.w,s:r3(s),e:r3(Math.max(e,s+0.05))});added.push(w.w)}}
+  P.words=words.sort((a,b)=>a.s-b.s);
+  for(const key of ['slots','tiles','zooms']){const out=[];
+    for(const it of (P[key]||[])){const [a,oka]=mp(it.a),[b0,okb]=mp(it.b);let b=b0;
+      if(b-a<0.15){if(key!=='zooms')flags.push(`${it.clip||it.text||'card'} was on cut material and was removed`);continue}
+      if(key==='slots'){const c=S.clipMap[it.clip];if(c)b=Math.min(b,a+c.len-(it.from||0))}
+      if(!(oka&&okb)&&key==='slots')flags.push(`check ${it.clip}: an edge was on a cut`);
+      out.push(Object.assign({},it,{a:r3(a),b:r3(b)}))}
+    P[key]=out}
+  if(P.hook){P.hook.a=r3(mp(P.hook.a)[0]);P.hook.b=r3(mp(P.hook.b)[0])}
+  if(P.whipAt)P.whipAt=P.whipAt.map(t=>r3(mp(t)[0]));
+  P.duration=r3(on.at(-1));
+  const q=a=>a.length>4?a.slice(0,4).join(' ')+'…':a.join(' ');
+  let msg='';if(lost.length)msg+=`. Captions lost “${q(lost)}”`;if(added.length)msg+=`. Captions gained “${q(added)}”`;if(flags.length)msg+='. '+flags.join('; ');
+  return{lost,added,flags,msg}}
+function applyKeep(nk,at){nk=normKeep(nk);const r=remapVisuals(S.keep,nk);S.keep=nk;finalStart();
+  if(S.sel&&!slots().includes(S.sel))S.sel=null;
+  main.setKeep(nk,at!=null?at:Math.min(main.currentTime,S.proj.duration));
+  S.capCache=null;lastChunk=null;$('#capBox').dataset.key='';return r}
+function cutEdit(label,fn,hearRaw){
+  if(!S.rawOK){toast('Your raw video isn’t in the folder, so cut changes can’t be rendered. Put it back first.',6000);return}
+  const before=snapshot(),nk=fn(cloneK(S.keep));
+  if(!nk){toast('There’s no more pause in the original here.');return}
+  if(sameK(normKeep(nk),S.keep)){toast('Nothing to change there.');return}
+  const nn=normKeep(nk),hear=hearRaw!=null?r2eK(nn,hearRaw):null;
+  const r=applyKeep(nn,hear!=null?Math.max(0,hear-1.5):null);S.undo.push(before);S.redo=[];
+  markDirty();renderCut();sync();toast(label+r.msg,r.flags.length?7000:3200);
+  if(hear!=null&&S.cutHear){S.playUntil=hear+1.5;main.play()}}
+const ctxt=(i,j)=>{const t=CW().slice(i,j+1).map(w=>w.w).join(' ');return t.length>40?t.slice(0,38)+'…':t};
+const ckept=i=>pieceIn(S.keep,wmid(CW()[i]))>=0;
+function doCut(){const {i,j}=S.csel;cutEdit(`Cut “${ctxt(i,j)}”`,K=>cutWordsK(K,i,j),CW()[i].s)}
+function doRestore(){const {i,j}=S.csel;cutEdit(`Restored “${ctxt(i,j)}”`,K=>restoreWordsK(K,i,j),CW()[i].s)}
+function backToRender(){const R=S.cut.renderedKeep;if(!R)return;cutEdit('Back to the last rendered cut',()=>cloneK(R),null)}
+function renderCut(){if(!S.cut||S.tab!=='cut')return;
+  const W=CW(),K=S.keep,R=S.cut.renderedKeep||K,d=klen(K)-klen(R);
+  $('#cutBan').style.display=S.rawOK?'none':'block';
+  $('#cutBan').textContent=`Your raw video (${S.cut.src}) isn’t in the folder, so cut changes can’t be rendered. Put it back to edit cuts.`;
+  $('#cutHead').innerHTML=`Length <b>${fmt(klen(K))}</b>${Math.abs(d)>0.005?` <span class="muted">(${d>0?'+':''}${d.toFixed(2)}s vs the rendered video)</span> <button id="cutReset" style="padding:2px 8px;margin-left:6px">Back to rendered cut</button>`:' <span class="muted">· same cut as the rendered video</span>'}`;
+  if($('#cutReset'))$('#cutReset').onclick=backToRender;
+  let a='';
+  if(S.csel){const {i,j}=S.csel;let nk=0,nc=0;for(let x=i;x<=j;x++)ckept(x)?nk++:nc++;
+    a=`<span>“${escH(ctxt(i,j))}”</span>${nk?'<button id="cCut" class="primary">Cut <kbd>⌫</kbd></button>':''}${nc?'<button id="cRes">Restore <kbd>R</kbd></button>':''}`}
+  else if(S.cjoin!=null&&K[S.cjoin+1]){const p=joinPause(K,S.cjoin);a=`<span>Pause at this join: <b>${(p.tail+p.head).toFixed(2)}s</b> of silence</span><button id="jLess">− Shorter</button><button id="jMore">+ Longer</button><button id="jHear">▶ Hear</button>`}
+  else a='<span class="muted">Select words to cut or restore, or click a join.</span>';
+  a+=`<label class="tog" style="margin-left:auto"><input type="checkbox" id="cutHear"${S.cutHear?' checked':''}> Play after each edit</label>`;
+  $('#cutAct').innerHTML=a;
+  $('#cutHear').onchange=e=>S.cutHear=e.target.checked;
+  if($('#cCut'))$('#cCut').onclick=doCut;if($('#cRes'))$('#cRes').onclick=doRestore;
+  const k=S.cjoin;
+  if($('#jLess'))$('#jLess').onclick=()=>cutEdit('Shorter pause',K=>shorterK(K,k),S.keep[k][1]-0.001);
+  if($('#jMore'))$('#jMore').onclick=()=>cutEdit('Longer pause',K=>longerK(K,k),S.keep[k][1]-0.001);
+  if($('#jHear'))$('#jHear').onclick=()=>{const t=r2eK(S.keep,S.keep[k][1]-0.001);seek(Math.max(0,t-1.5));S.playUntil=t+1.5;main.play()};
+  const why={};(S.cut.cuts||[]).forEach(c=>{for(let x=c.a;x<=c.b;x++)why[x]=c.why});
+  let h='<p>',prev=null,run=false,wc=0;
+  for(let i=0;i<W.length;i++){const kp=pieceIn(K,wmid(W[i])),sel=S.csel&&i>=S.csel.i&&i<=S.csel.j;
+    if(kp>=0){run=false;if(prev!=null&&kp!==prev)h+=`<span class="jn${S.cjoin===kp-1?' on':''}" data-k="${kp-1}" title="Join: click to change its pause"></span>`;prev=kp}
+    else if(!run){run=true;const mine=pieceIn(S.cut.autoKeep||[],wmid(W[i]))>=0;h+=`<span class="why">${mine?'you':escH(why[i]||'cut')}</span>`}
+    h+=`<span class="cw${kp<0?' x':''}${sel?' sel':''}" data-i="${i}">${escH(W[i].w)}</span> `;wc++;
+    if(kp>=0&&/[.?!]$/.test(W[i].w)&&wc>=30){h+='</p><p>';wc=0}}
+  $('#cutText').innerHTML=h+'</p>';S.cnow=-1;cutNow(main.currentTime)}
+function cutNow(t){if(!S.cut)return;const i=cwordAt(main.e2r(t));if(i===S.cnow)return;
+  const o=$(`#cutText .cw.now`);if(o)o.classList.remove('now');const el=$(`#cutText .cw[data-i="${i}"]`);S.cnow=i;
+  if(el){el.classList.add('now');if(!main.paused){const b=$('#cutText'),r=el.getBoundingClientRect(),br=b.getBoundingClientRect();if(r.top<br.top||r.bottom>br.bottom)b.scrollTop+=r.top-br.top-60}}}
+S.cutHear=true;
+let cDown=null;
+$('#cutText').addEventListener('pointerdown',e=>{const jn=e.target.closest('.jn');
+  if(jn){const k=+jn.dataset.k;S.cjoin=k;S.csel=null;main.pause();seek(Math.max(0,r2eK(S.keep,S.keep[k][1]-0.001)-1));renderCut();return}
+  const w=e.target.closest('.cw');if(!w)return;const i=+w.dataset.i;cDown={i,moved:false};S.cjoin=null;S.csel={i,j:i};renderCut()});
+$('#cutText').addEventListener('pointerover',e=>{if(!cDown)return;const w=e.target.closest('.cw');if(!w)return;const i=+w.dataset.i;if(i!==cDown.i)cDown.moved=true;
+  S.csel={i:Math.min(cDown.i,i),j:Math.max(cDown.i,i)};renderCut()});
+window.addEventListener('pointerup',()=>{if(!cDown)return;const d=cDown;cDown=null;
+  if(!d.moved&&ckept(d.i)){const w=CW()[d.i],k=pieceIn(S.keep,wmid(w));const playing=!main.paused;seek(r2eK(S.keep,Math.max(w.s-0.03,S.keep[k][0])));if(playing)main.play()}});
+
 /* ---------- save ---------- */
 async function save(){
-  toast('This test version never saves. Your real projects are untouched.');return;
-  if(!S.proj)return;slots().forEach(s=>s.line=lineFor(s.a,s.b));
-  S.proj.status='edited';S.proj.savedAt=new Date().toISOString();
-  const ok=await S.vid.write(S.projFile,JSON.stringify(S.proj,null,1)).catch(e=>{toast('Couldn’t save: '+e.message,6000);return null});
-  if(ok===null)return;S.dirty=false;setStatus();
-  const name=pname(S.projFile,'_broll_project.json');
-  toast(ok?`Saved. Now ask Claude: <b>“render my B-roll edits for ${name}”</b>`:`Downloaded ${pname(S.projFile,'')}. Move it into <i>Videos/${name}/editor files</i>, then ask Claude to render.`,7000);
+  if(!S.proj)return;slots().forEach(s=>s.line=lineFor(s.a,s.b));const now=new Date().toISOString();
+  const keep=S.keep.map(k=>[+k[0].toFixed(4),+k[1].toFixed(4)]),cutCh=!sameK(keep,S.cut.renderedKeep||[]);
+  S.cut.keep=keep;S.cut.status=cutCh?'edited':'rendered';S.cut.savedAt=now;
+  S.proj.cutKeep=keep;S.proj.duration=+klen(S.keep).toFixed(3);S.proj.status='edited';S.proj.savedAt=now;
+  const err=e=>{toast('Couldn’t save: '+e.message,6000);return null};
+  const ok1=await S.vid.write(S.cutFile,JSON.stringify(S.cut)).catch(err);if(ok1===null)return;
+  const ok=await S.vid.write(S.projFile,JSON.stringify(S.proj,null,1)).catch(err);if(ok===null)return;
+  S.dirty=false;setStatus();
+  const name=pname(S.projFile,'_broll_project.json'),msg=`render my edits for ${name}`;
+  toast(ok?`Saved. Now tell Claude: <b>“${msg}”</b> <button id="cpy" style="padding:2px 8px">Copy</button>`:`This browser can’t write to the folder, so two files were downloaded. Move them into <i>Videos/${name}/editor files</i>, then ask Claude to render.`,9000);
+  const b=$('#cpy');b&&(b.onclick=()=>{navigator.clipboard.writeText(msg);b.textContent='Copied'})
 }
+window.addEventListener('beforeunload',e=>{if(S.dirty){e.preventDefault();e.returnValue=''}});
 $('#hudCopy').onclick=()=>{const s=main.stats();navigator.clipboard.writeText('Playback test: '+$('#hud').textContent+` | ${main.pieces()} pieces, ${main.segCount()} swaps, ${s.frames} frames, worst sync ${Math.round(s.syncMax*1000)} ms, worst late ${Math.round(s.lateMax)} ms, hard seeks ${s.hard}`);toast('Copied. Paste it to Claude.')};
 $('#hudReset').onclick=()=>main.reset();
 $('#saveBtn').onclick=save;$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
@@ -974,7 +1127,9 @@ document.addEventListener('keydown',e=>{
   if(mod&&e.key.toLowerCase()==='s'){e.preventDefault();save();return}
   if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}
   if(e.key===' '){e.preventDefault();main.paused?main.play():main.pause();return}
-  if(e.key==='Escape'){if(e.target.blur)e.target.blur();select(null);return}
+  if(e.key==='Escape'){if(e.target.blur)e.target.blur();select(null);S.csel=null;S.cjoin=null;renderCut();return}
+  if(S.tab==='cut'&&S.csel&&(e.key==='Delete'||e.key==='Backspace')){e.preventDefault();doCut();return}
+  if(S.tab==='cut'&&S.csel&&e.key.toLowerCase()==='r'&&!mod){e.preventDefault();doRestore();return}
   if((e.key==='Delete'||e.key==='Backspace')&&S.sel){e.preventDefault();delSel();return}
   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const d=(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?0.5:0.1);
     if(S.sel){const s=S.sel,{lo,hi}=neighbors(s),len=s.b-s.a;const a=Math.max(lo,Math.min(s.a+d,hi-len));if(a!==s.a){pushUndo();s.a=r2(a);s.b=r2(a+len);markDirty();seek(s.a)}}
