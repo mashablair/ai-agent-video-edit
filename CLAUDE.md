@@ -70,7 +70,7 @@ Setup is done and the smoke test passed: polish.py through the full chain, and g
 6. Hardware encoding (tested 2026-10-25 with VMAF; Maria's rule is to switch only if the score is within 1 point and the render is at least 2× faster): `polish.py` final renders use `h264_videotoolbox -b:v 16M` (VMAF 98.07 vs 98.72, 2.6× faster). `glorious.py` stays on libx264 CRF 18, because its compositing filters cap the gain at 1.8×.
 
 ## House rules (approved by Maria; don't re-ask)
-- **Never modify or move her original files.** Deliverables go to `Videos/<name>/` as `<name>_clean.mp4`, `<name>_glorious.mp4` and so on. Never overwrite: add `_v2`, `_v3`. Move superseded versions to `_agent/tmp/`.
+- **Never modify or move her original files.** Deliverables go to `Videos/<name>/` as `<name>_clean.mp4`, `<name>_glorious.mp4` and so on. Never overwrite: add `_v2`, `_v3`. Move superseded versions to `_agent/tmp/`. Don't let video backups pile up there (her rule, 2026-11-04): keep at most the one newest superseded version of each deliverable, and only while that video's `Videos/<name>/` folder still exists; delete older video copies, samples and proxies in `_agent/tmp/` (scripts and JSON backups are tiny, keep them). Also clear `~/vp/` work dirs of videos that are done. Check sizes now and then (`du -sh _agent/tmp ~/vp`).
 - **Don't delete anything in her folders.** Move junk to `_agent/tmp/_to_delete/` (or `_catalog/_to_delete/` in the library) and tell her.
 - Strip all metadata from outputs (`-map_metadata -1`), including the iPhone GPS location.
 - Two separate steps: **step 1 cleanup** (cuts and studio voice only; no captions, zooms, B-roll or cards), then **step 2 visuals**. Never mix them unless she asks.
