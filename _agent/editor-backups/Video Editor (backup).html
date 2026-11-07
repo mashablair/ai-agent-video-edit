@@ -28,7 +28,7 @@ header .grow{flex:1;min-width:0}
 #projSel{max-width:320px}
 #status{flex:1;min-width:0;color:var(--mute);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #status.dirty{color:var(--warn)}
-main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
+main{display:grid;grid-template-columns:minmax(0,1fr) var(--side,380px);min-height:0}
 #stageWrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;min-height:0}
 #stage{position:relative;height:100%;max-height:calc(100vh - 56px - 250px - 70px);aspect-ratio:9/16;background:#000;border-radius:6px;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
 #stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -102,7 +102,9 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
 #transport{display:flex;align-items:center;gap:10px}
 #time{font-variant-numeric:tabular-nums;background:#fff;color:#111;border-radius:999px;padding:3px 12px;font-size:13px;font-weight:600}
 label.tog{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:13px;cursor:pointer}
-aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--panel);position:relative}
+#sideGrip{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:5}
+#sideGrip:hover,#sideGrip.on{background:linear-gradient(90deg,transparent 3px,var(--accent) 3px,var(--accent) 5px,transparent 5px)}
 #inspector{padding:14px;border-bottom:1px solid var(--line);max-height:48%;overflow:auto}
 #inspector h3{margin:0 0 8px;font-size:15px}
 .muted{color:var(--mute)}
@@ -124,7 +126,25 @@ aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-h
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{padding:4px 10px;border-radius:999px;font-size:12px}
 .chip.on{background:var(--text);color:#111;border-color:var(--text)}
-#grid{overflow:auto;padding:10px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-content:start}
+#grid{overflow:auto;padding:10px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;align-content:start}
+#grid.sm{grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px}
+#grid.sm .card{border-radius:6px}
+#grid.sm .card .nm{font-size:8.5px;padding:10px 3px 2px}
+#grid.sm .card .tag{font-size:8px;padding:0 3px;top:2px;left:2px}
+#libBar{display:flex;align-items:center;gap:8px}
+#libBar #libMode{flex:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.seg button{border:0;border-radius:0;padding:3px 9px;font-size:12px;background:transparent}
+.seg button.on{background:var(--text);color:#111}
+/* 1) collapsible overview */
+.ovh{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;margin:0 0 6px}
+.ovh h3{margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ovh .car,#inspector details>summary::before{content:'';display:inline-block;flex:none;width:0;height:0;border-left:7px solid var(--mute);border-top:5px solid transparent;border-bottom:5px solid transparent;margin:0 7px 0 2px;transition:transform .12s;vertical-align:1px}
+.ovh .car.open,#inspector details[open]>summary::before{transform:rotate(90deg)}
+.ovsum{color:var(--mute);font-size:13px}
+.ovsum .ovw{color:var(--warn)}
+#inspector details>summary{cursor:pointer;list-style:none;margin:14px 0 4px;font-weight:600;font-size:14px}
+#inspector details>summary::-webkit-details-marker{display:none}
 .card{position:relative;border-radius:8px;overflow:hidden;background:#000;cursor:pointer;height:0;padding-top:177.7%;border:2px solid transparent}
 .card:hover{border-color:var(--accent)}
 .card img,.card video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -207,6 +227,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
       </div>
     </section>
     <aside>
+      <div id="sideGrip" title="Drag to make the panel wider or narrower (double-click to reset)"></div>
       <div id="tabs"><button data-tab="cut">Cut</button><button data-tab="broll" class="on">B-roll</button><button data-tab="cap">Captions</button></div>
       <div id="paneCut"><div id="cutBan"></div><div id="cutHead"></div><div id="cutAct"></div><div id="cutText"></div>
         <div class="muted small" style="padding:8px 14px;border-top:1px solid var(--line)">Click a word to jump there. Drag across words to select. <kbd>⌫</kbd> cut · <kbd>R</kbd> restore · click a <span style="border-left:2px solid #5a6168;padding-left:3px">join</span> to shorten or lengthen its pause. Captions and B-roll move with your cuts.</div></div>
@@ -214,7 +235,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
         <div id="inspector"></div>
         <div id="lib">
           <div id="libTop">
-            <div id="libMode"></div>
+            <div id="libBar"><div id="libMode"></div><div class="seg" id="thumbSz" title="Thumbnail size"><button data-sz="lg">Large</button><button data-sz="sm">Small</button></div></div>
             <input id="search" placeholder="Search clips: rose, walking, sunglasses, date…">
             <div class="chips" id="chips"></div>
           </div>
@@ -403,6 +424,17 @@ async function connectBtn(which){
   if(h){try{if(await h.requestPermission({mode:'readwrite'})==='granted'&&await useFS(which,handleFS(h)))return}catch{}}
   pick(which);
 }
+/* side panel width (drag its left edge) and clip thumbnail size */
+function setSide(w){const max=Math.max(320,window.innerWidth-420);w=Math.round(Math.max(300,Math.min(max,w)));document.querySelector('main').style.setProperty('--side',w+'px');return w}
+setSide(pref('sideW',380));
+$('#sideGrip').onpointerdown=e=>{e.preventDefault();const g=e.currentTarget,x0=e.clientX,w0=$('aside').getBoundingClientRect().width;g.setPointerCapture(e.pointerId);g.classList.add('on');
+  g.onpointermove=ev=>setSide(w0+(x0-ev.clientX));
+  g.onpointerup=()=>{g.onpointermove=g.onpointerup=null;g.classList.remove('on');setPref('sideW',$('aside').getBoundingClientRect().width)}};
+$('#sideGrip').ondblclick=()=>{setSide(380);setPref('sideW',380)};
+window.addEventListener('resize',()=>setSide(pref('sideW',380)));
+function setThumb(sz){$('#grid').classList.toggle('sm',sz==='sm');$('#thumbSz').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.sz===sz))}
+setThumb(pref('thumb','lg'));
+$('#thumbSz').querySelectorAll('button').forEach(b=>b.onclick=()=>{setPref('thumb',b.dataset.sz);setThumb(b.dataset.sz)});
 $('#b-vid').onclick=()=>connectBtn('vid');
 $('#b-lib').onclick=()=>connectBtn('lib');
 $('#in-vid').onchange=e=>e.target.files.length&&useFS('vid',listFS(e.target.files));
@@ -526,16 +558,24 @@ function renderInspector(){
   const s=S.sel;
   if(!s){
     const W=warnings();const D=dur(),cov=slots().reduce((n,x)=>n+x.b-x.a,0);
-    box.innerHTML=`<h3>${S.proj.video}</h3>
+    const oc=pref('ovClosed',false),pct=Math.round(cov/(D||1)*100);
+    box.innerHTML=`<div class="ovh" id="ovTog" title="${oc?'Show':'Hide'} the overview"><span class="car${oc?'':' open'}"></span><h3>${S.proj.video}</h3></div>
+      ${oc?`<div class="ovsum">${pct}% B-roll · ${slots().length} clips · ${D.toFixed(1)}s${W.length?` · <span class="ovw">⚠ ${W.length} warning${W.length>1?'s':''}</span>`:''}</div>`:`<div id="ovBody">
       <div class="stat"><div><b>${Math.round(cov/(D||1)*100)}%</b><span class="muted small">B-roll</span></div><div><b>${slots().length}</b><span class="muted small">clips</span></div><div><b>${D.toFixed(1)}s</b><span class="muted small">length</span></div></div>
       <ul class="warns">${W.length?W.map((w,i)=>`<li data-w="${i}">⚠ ${w.m}</li>`).join(''):'<li class="ok">✓ Follows your B-roll rules</li>'}</ul>
       <div class="row" style="margin-top:12px"><button id="addHere">+ Add B-roll at playhead</button></div>
-      <h4 style="margin:14px 0 4px">Zooms <span class="muted small">(${(S.proj.zooms||[]).length})</span> <button id="zAdd" style="float:right;padding:3px 8px">+ Zoom here</button></h4>
+      <details id="zDet"${pref('zOpen',true)?' open':''}><summary>Zooms <span class="muted small">(${(S.proj.zooms||[]).length})</span> <button id="zAdd" style="float:right;padding:3px 8px">+ Zoom here</button></summary>
       <div id="zList">${(S.proj.zooms||[]).map((z,i)=>`<div class="zl"><span class="t" data-zs="${i}">${fmt(z.a)}–${fmt(z.b)}</span><input type="number" step="0.05" data-za="${i}" value="${z.a}"><input type="number" step="0.05" data-zb="${i}" value="${z.b}"><select data-zt="${i}">${[['beat','Framing'],['beatwhip','Whip to framing'],['zoomin','Zoom in'],['drift','Drift out'],['whip','Whip + flash'],['hold','Hold']].map(([v,l])=>`<option value="${v}"${(z.type||'drift')===v?' selected':''}>${l}</option>`).join('')}</select><select data-zz="${i}">${[1.0,1.04,1.06,1.064,1.08,1.1,1.12,1.14,1.18,1.2,1.24,1.26,1.35,1.55].map(v=>`<option${Math.abs((z.z||1.064)-v)<1e-3?' selected':''}>${v}</option>`).join('')}</select><button data-zx="${i}" title="Delete">×</button></div>`).join('')}</div>
-      <h4 style="margin:14px 0 4px">Cards <span class="muted small">(${(S.proj.tiles||[]).length})</span> <button id="tAdd" style="float:right;padding:3px 8px">+ Card here</button></h4>
+      </details>
+      <details id="tDet"${pref('tOpen',true)?' open':''}><summary>Cards <span class="muted small">(${(S.proj.tiles||[]).length})</span> <button id="tAdd" style="float:right;padding:3px 8px">+ Card here</button></summary>
       <div id="tList">${(S.proj.tiles||[]).map((t,i)=>`<div class="zl"><span class="t" data-ts="${i}">${fmt(t.a)}</span><input type="number" min="0" step="1" data-tn="${i}" value="${t.num||''}" style="width:42px"><input type="text" data-tt="${i}" value="${escH(t.text||'')}"><input type="number" step="0.05" data-ta="${i}" value="${t.a}" title="Starts at"><input type="number" step="0.05" data-tb="${i}" value="${t.b}" title="Ends at"><button data-tx="${i}" title="Delete">×</button></div>`).join('')}</div>
+      </details>
       <div class="muted small" style="margin:4px 0 10px"><b>Framing</b> (the main style, from the Captions example): each one snaps to a new framing — wide 1.0, medium 1.12 or tight 1.24 — in 0.2s (instantly on a jump cut) and creeps slowly in until the next one; <b>+ Zoom here</b> splits the current framing at the playhead. <b>Whip to framing</b>: white flash, starts at 1.55 and snaps back to its target in 0.8s. Other types: <b>Zoom in</b> eases in to 1.22 around her face over 0.7s, holds until its end time, then eases back out (the main zoom layer, every 8–10s); <b>Drift out</b> starts slightly zoomed in (1.064, or 1.04 for short shots) and eases back to normal by its end time; <b>Whip + flash</b> flashes white and snaps back from 1.55 in 0.8s, for big moments; <b>Hold</b> stays zoomed. Card: the white list card at the bottom. Edit the time boxes to retime; click a time to jump there.</div>
-      <div class="muted small">Click a gold block to edit it. Drag it to move, or drag its edges to trim. Double-click the empty B-roll row to add one. <kbd>space</kbd> play · <kbd>⌫</kbd> delete · <kbd>←</kbd><kbd>→</kbd> nudge · <kbd>⌘Z</kbd> undo · <kbd>⌘S</kbd> save</div>`;
+      <div class="muted small">Click a gold block to edit it. Drag it to move, or drag its edges to trim. Double-click the empty B-roll row to add one. <kbd>space</kbd> play · <kbd>⌫</kbd> delete · <kbd>←</kbd><kbd>→</kbd> nudge · <kbd>⌘Z</kbd> undo · <kbd>⌘S</kbd> save</div></div>`}`;
+    $('#ovTog').onclick=()=>{setPref('ovClosed',!oc);renderInspector()};
+    if(oc)return;
+    for(const [id,k] of [['zDet','zOpen'],['tDet','tOpen']])$('#'+id).ontoggle=e=>setPref(k,e.target.open);
+    for(const id of ['zAdd','tAdd'])$('#'+id).addEventListener('click',e=>e.preventDefault());   // a button in the summary shouldn't fold the list
     box.querySelectorAll('[data-w]').forEach(li=>li.onclick=()=>{const w=W[+li.dataset.w];if(w.s){select(w.s);seek(w.s.a)}});
     $('#addHere').onclick=()=>{S.libMode='add';renderLibMode();$('#search').focus();toast('Pick a clip from the library to drop it at the playhead')};
     const Z=()=>S.proj.zooms=S.proj.zooms||[],T=()=>S.proj.tiles=S.proj.tiles||[];
@@ -784,6 +824,9 @@ function drawZoom(t){const v=zoomAt(t),an=S.proj.zoomAnchor||[0.5,0.5];
 function drawTile(t){const b=$('#tileBox'),tl=(S.proj.tiles||[]).find(x=>t>=x.a&&t<x.b);if(!tl){b.style.display='none';b.dataset.k='';return}
   const sw=$('#stage').clientWidth,sh=$('#stage').clientHeight,k=tl.a+tl.text+tl.num;if(b.dataset.k===k&&b.style.display==='block')return;b.dataset.k=k;
   b.innerHTML=`<div style="position:absolute;left:0;right:0;bottom:100%;height:12.5%;background:rgba(255,255,255,.4)"></div><div style="position:absolute;left:${.047/.78*100}%;top:${.024/.132*100}%;font-family:'cap-intertight-b';font-size:${.035*sw}px;letter-spacing:.06em;color:#4d4d4d;line-height:1">${String(tl.num||'').padStart(2,'0').split('').join(' ')}</div><div style="position:absolute;left:${.047/.78*100}%;top:${.058/.132*100}%;font-family:'cap-intertight-m';font-size:${.06*sw}px;letter-spacing:-0.012em;line-height:1;white-space:nowrap">${escH(tl.text||'')}</div>`;b.style.display='block'}
+// per-viewer layout choices (panel width, thumbnail size, folded sections); the page works without them
+function pref(k,d){try{const v=localStorage.getItem('ve.'+k);return v===null?d:JSON.parse(v)}catch{return d}}
+function setPref(k,v){try{localStorage.setItem('ve.'+k,JSON.stringify(v))}catch{}}
 const HOOKDEF={enabled:false,text:'',a:0,b:2.5,y:0.22,size:0.34,style:'neg',color:'#FFFFFF',outlineOn:false,outline:0.004,outlineColor:'#000000',shadowOn:false,shadow:0.006,shadowBlur:0.008,shadowOpacity:0.5};
 // the size it really renders at: never wider than 94% of the frame (same rule as glorious.py hook_geom)
 function hookEm(h,sw){const lines=h.text.split('|').map(x=>x.trim()).filter(Boolean);let em=h.size*sw;if(!lines.length)return em;_mc.font=`${em}px 'cap-intertight-black'`;const wid=Math.max(...lines.map(x=>_mc.measureText(x).width*0.97));return em*Math.min(1,0.94*sw/wid)}
