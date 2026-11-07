@@ -319,7 +319,7 @@ def hook_ass(S,F,deco=False):
         ol=float(hk.get("outline",0) or 0)*W if hk.get("outlineOn") else 0; sh=float(hk.get("shadow",0) or 0)*W if hk.get("shadowOn") else 0; evs=[]
         if sh>0:
             al=f"&H{round((1-float(hk.get('shadowOpacity',0.5)))*255):02X}&"
-            evs.append(ev(0,sh,f"\\bord{ol:.1f}\\shad0\\1c&H000000&\\3c&H000000&\\blur{float(hk.get('shadowBlur',0.006))*W:.1f}\\alpha&HFF&",f"\\alpha{al}","\\alpha&HFF&"))
+            evs.append(ev(0,sh,f"\\bord{ol:.1f}\\shad0\\1c&H000000&\\3c&H000000&\\blur{float(hk.get('shadowBlur',0.008))*W:.1f}\\alpha&HFF&",f"\\alpha{al}","\\alpha&HFF&"))
         if ol>0:
             evs.append(ev(1,0,f"\\bord{ol:.1f}\\shad0\\1a&HFF&\\3c{hexass(hk.get('outlineColor','#000000'))}\\3a&HFF&","\\3a&H00&","\\3a&HFF&"))
         if not evs: return None
