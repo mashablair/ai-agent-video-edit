@@ -146,14 +146,14 @@ def db10(wav):
     return 20*np.log10(np.sqrt((fr**2).mean(1))+1e-9)
 
 def pause_level(db):
-    """Per-10ms pause level: 4 dB over the local background (15th percentile over +-5 s), clamped to -42..-32 dB
+    """Per-10ms pause level: 6 dB over the local background (was 4 until 2026-11-07: -38 dB room tone in 1103-5 read as sound) (15th percentile over +-5 s), clamped to -42..-34 dB (was -32: in the noisy 1103-2 take +6 dB then reached soft words)
     (soft speech sits around -25..-30 dB, so a higher cap squeezed real words away).
     Car hum sits around -35 dB, so the old fixed -42 dB never saw her thinking pauses (her CapCut re-cut of 1025-1, 2026-10-26).
     Returns (smoothed level, threshold); the 50 ms median keeps single hum spikes from splitting a pause."""
     import numpy as np
     n=len(db); pts=np.arange(0,n,50)
     fl=np.array([np.percentile(db[max(0,i-500):min(n,i+500)],15) for i in pts])
-    th=np.clip(np.interp(np.arange(n),pts,fl)+4,-42,-32)
+    th=np.clip(np.interp(np.arange(n),pts,fl)+6,-42,-34)
     sm=np.median(np.lib.stride_tricks.sliding_window_view(np.pad(db,2,mode="edge"),5),axis=1)
     return sm,th
 
@@ -191,6 +191,12 @@ def auto_segs(W,dur,E,db,fps):
         g["e"]=min(lim,t+0.12); lo=W[i0-1]["s"]+0.15 if i0>0 else 0; t=g["s"]
         while t>lo and not quiet(t-0.01): t-=0.01
         g["s"]=max(lo,t-0.08)
+        if i0>0 and i0-1 in DEL:   # after a cut word: start at the kept word's onset, skipping a breath or noise left between (her 1103-5 fix)
+            k0,k1=ix(max(lo,W[i0]["s"]-0.6)),ix(W[i0]["s"]+0.1); q=0; onset=None
+            for j in range(k0,k1):
+                q=q+1 if sm[j]<th[j] else 0
+                if q>=8: onset=j+1   # end of the last quiet run of >=80 ms before the word
+            if onset is not None: g["s"]=max(g["s"],onset/100-0.08)
     for k in range(1,len(segs)):
         if segs[k]["s"]<segs[k-1]["e"]: segs[k]["s"]=segs[k-1]["e"]
     for a,b in KP:   # a kept pause between two phrases: join them so the whole beat stays

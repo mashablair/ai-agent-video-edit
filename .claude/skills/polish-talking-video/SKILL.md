@@ -90,11 +90,16 @@ She offered to supply before/after examples of her manual fixes. When she has sa
   - Cut circular labels that name the topic while describing it ("acts like breadcrumbing, right? He is not committing" became "acts like he's not committing").
   - Test: for each sentence ask "does the viewer lose anything if this is gone?" If not, cut it.
   - Go straight to the call to action (her Cut Editor fix of 1103-1, 2026-11-04): "I'm not gonna wait. I'm not gonna wait. So don't wait." became just "So don't wait." When a line about herself only sets up the line telling the viewer what to do, cut both takes of it, not just the repeat.
+- **Her Cut Editor fix of 1103-5 (2026-11-07, approved as defaults):**
+  - Cut a self-intro that doesn't hook ("I make content. I create content."): open on who the video is for ("My loves, I talk to women over 40…").
+  - Cut a sentence-opening "And" after a pause ("And sometimes before you can leave" became "Sometimes, before you can leave").
+  - Never stitch across a hesitation: "dating is… [pause, "you know"] a skill" glued into "dating is a skill" sounds stitched. Keep the take that flows ("dating, it's a skill") even if the grammar is looser.
+  - Keep an affirming "Yes," when it opens a clean sentence ("Yes, it can be either abusive…"); only the broken words before it are the false start.
 - **Keep:** her personality and hooks, such as rhetorical openers that lead somewhere crisp ("Which ones do we have? Which ones do I recommend?", "And here's the thing"), "So honestly, ladies", "Hands down", "God forbid", short emphasis beats like "Yeah.", wrap-up recaps, and jokes or playful rephrasings ("you're not gonna get sex, so you're not gonna get intimacy, or whatever…"). When unsure, keep it and flag it in the cut list.
 - **No slivers at word-level cuts (1103-1):** in fast speech, a cut word's edge often leaves a 50–250 ms sliver of it ("ple-" before "pleasant", "your" after "Create", a breath-word before "As a 45-year-old"); she moved those edges to the next word's onset herself. For every word-level cut with no pause around it, check the 10 ms dB profile and put the edge at the quietest point right before the kept word starts. Read the KEPT TEXT for words that crept back (e.g. "women they need to be rescued").
 - **Prefer one clean cut over several micro-cuts in one sentence.** Three tiny cuts in the Tinder sentence sounded choppy. If cutting a small stutter ("v- very") would sound worse, leave it in.
 - **Don't cut where the grammar would break.** For example, "if you kind of interested" stays rather than becoming "if you interested".
-- **Pauses (approved 2026-10-26 from her CapCut re-cut of 1025-1):** long pauses between thoughts lose viewers: cut thinking pauses to ~0.2 s. Keep only silent reaction beats; if the beat holds a stray sound or throwaway word (the "Next." after "they don't show up in your life" in 1103-1), she cuts it. Keep reaction beats (smile, smirk, gesture after a punchline, e.g. "much better." → smile, "when I was 19." → smirk) and dramatic beats ("until … five in the morning") at their natural ~0.5–0.9 s via `keep_pauses`. Pauses are detected relative to the background noise (car hum sits ~-35 dB, above the old fixed -42 dB that let 1–1.3 s pauses through).
+- **Pauses (approved 2026-10-26 from her CapCut re-cut of 1025-1):** long pauses between thoughts lose viewers: cut thinking pauses to ~0.2 s. Keep only silent reaction beats; if the beat holds a stray sound or throwaway word (the "Next." after "they don't show up in your life" in 1103-1), she cuts it. **Exception, the very end:** no silent hold before the closing kiss or sign-off; keep the "mwah" itself but cut the wait before it (her 1103-5 fix). Keep reaction beats (smile, smirk, gesture after a punchline, e.g. "much better." → smile, "when I was 19." → smirk) and dramatic beats ("until … five in the morning") at their natural ~0.5–0.9 s via `keep_pauses`. Pauses are detected relative to the background noise (car hum sits ~-35 dB, above the old fixed -42 dB that let 1–1.3 s pauses through): 6 dB over the local background, capped at -34 dB (2026-11-07; at +4 dB, -38 dB room tone in 1103-5 kept a 0.77 s gap). After a cut word, the next piece starts at the kept word's onset, skipping a breath left between (1103-5: 0.56 s of breath after a cut "Um"). Still read the KEPT TEXT and check after each cut filler that no breath is left.
 - **Pause squeezing:** dead air is squeezed to a short breath (`max_pause`), but the script still extends phrase edges until the voice fades, so words aren't clipped. Don't tighten the voice-fade padding; she complained about clipped words. Fixing clipped words, abrupt joins and missed fillers by hand used to take her the most time; that's what the Cut Editor is for.
 - **Speed:** keep normal speed. She speeds up manually in CapCut when she wants to.
 
@@ -265,14 +270,14 @@ def db10(wav):
     return 20*np.log10(np.sqrt((fr**2).mean(1))+1e-9)
 
 def pause_level(db):
-    """Per-10ms pause level: 4 dB over the local background (15th percentile over +-5 s), clamped to -42..-32 dB
+    """Per-10ms pause level: 6 dB over the local background (was 4 until 2026-11-07: -38 dB room tone in 1103-5 read as sound) (15th percentile over +-5 s), clamped to -42..-34 dB (was -32: in the noisy 1103-2 take +6 dB then reached soft words)
     (soft speech sits around -25..-30 dB, so a higher cap squeezed real words away).
     Car hum sits around -35 dB, so the old fixed -42 dB never saw her thinking pauses (her CapCut re-cut of 1025-1, 2026-10-26).
     Returns (smoothed level, threshold); the 50 ms median keeps single hum spikes from splitting a pause."""
     import numpy as np
     n=len(db); pts=np.arange(0,n,50)
     fl=np.array([np.percentile(db[max(0,i-500):min(n,i+500)],15) for i in pts])
-    th=np.clip(np.interp(np.arange(n),pts,fl)+4,-42,-32)
+    th=np.clip(np.interp(np.arange(n),pts,fl)+6,-42,-34)
     sm=np.median(np.lib.stride_tricks.sliding_window_view(np.pad(db,2,mode="edge"),5),axis=1)
     return sm,th
 
@@ -310,6 +315,12 @@ def auto_segs(W,dur,E,db,fps):
         g["e"]=min(lim,t+0.12); lo=W[i0-1]["s"]+0.15 if i0>0 else 0; t=g["s"]
         while t>lo and not quiet(t-0.01): t-=0.01
         g["s"]=max(lo,t-0.08)
+        if i0>0 and i0-1 in DEL:   # after a cut word: start at the kept word's onset, skipping a breath or noise left between (her 1103-5 fix)
+            k0,k1=ix(max(lo,W[i0]["s"]-0.6)),ix(W[i0]["s"]+0.1); q=0; onset=None
+            for j in range(k0,k1):
+                q=q+1 if sm[j]<th[j] else 0
+                if q>=8: onset=j+1   # end of the last quiet run of >=80 ms before the word
+            if onset is not None: g["s"]=max(g["s"],onset/100-0.08)
     for k in range(1,len(segs)):
         if segs[k]["s"]<segs[k-1]["e"]: segs[k]["s"]=segs[k-1]["e"]
     for a,b in KP:   # a kept pause between two phrases: join them so the whole beat stays
