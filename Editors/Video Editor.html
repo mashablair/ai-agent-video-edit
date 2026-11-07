@@ -51,7 +51,9 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
 #tileBox{position:absolute;left:10.4%;top:78.8%;width:78%;height:13.2%;background:rgba(248,248,248,.98);color:#555;display:none;pointer-events:none;box-sizing:border-box}
 #flash{position:absolute;inset:0;background:rgba(255,255,255,.55);display:none;pointer-events:none}
 .zl{display:flex;gap:6px;align-items:center;margin:3px 0;font-size:12.5px}.zl input[type=number]{width:62px}.zl input[type=text]{flex:1;min-width:0}.zl .t{cursor:pointer;color:var(--accent);min-width:92px}
-#hookBox{position:absolute;left:50%;top:20%;text-align:center;white-space:nowrap;pointer-events:none;display:none;line-height:.92;color:#fff;font-family:'cap-intertight-black'}
+#hookBox{position:absolute;left:50%;top:20%;text-align:center;white-space:nowrap;pointer-events:auto;cursor:ns-resize;touch-action:none;display:none;line-height:.92;color:#fff;font-family:'cap-intertight-black'}
+#hookBox:hover{outline:1px dashed rgba(255,255,255,.55);outline-offset:4px}
+#hookDeco{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 #hookBox.neg{mix-blend-mode:difference}
 #hlBox{position:absolute;left:50%;top:20%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;color:#FCFCFC;line-height:.95;display:none;white-space:nowrap}
 #capGuide{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--accent);display:none;pointer-events:none}
@@ -189,7 +191,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
         <div id="capGuide"></div>
         <div id="capBox" title="Drag to move the captions"></div>
         <div id="hlBox"></div>
-        <div id="hookBox"></div>
+        <div id="hookBox" title="Drag up or down to move the hook word"></div>
+        <canvas id="hookDeco"></canvas>
         <div id="tileBox"></div>
         <div id="flash"></div>
         <div id="badge"></div>
@@ -781,9 +784,13 @@ function drawZoom(t){const v=zoomAt(t),an=S.proj.zoomAnchor||[0.5,0.5];
 function drawTile(t){const b=$('#tileBox'),tl=(S.proj.tiles||[]).find(x=>t>=x.a&&t<x.b);if(!tl){b.style.display='none';b.dataset.k='';return}
   const sw=$('#stage').clientWidth,sh=$('#stage').clientHeight,k=tl.a+tl.text+tl.num;if(b.dataset.k===k&&b.style.display==='block')return;b.dataset.k=k;
   b.innerHTML=`<div style="position:absolute;left:0;right:0;bottom:100%;height:12.5%;background:rgba(255,255,255,.4)"></div><div style="position:absolute;left:${.047/.78*100}%;top:${.024/.132*100}%;font-family:'cap-intertight-b';font-size:${.035*sw}px;letter-spacing:.06em;color:#4d4d4d;line-height:1">${String(tl.num||'').padStart(2,'0').split('').join(' ')}</div><div style="position:absolute;left:${.047/.78*100}%;top:${.058/.132*100}%;font-family:'cap-intertight-m';font-size:${.06*sw}px;letter-spacing:-0.012em;line-height:1;white-space:nowrap">${escH(tl.text||'')}</div>`;b.style.display='block'}
-const HOOKDEF={enabled:false,text:'',a:0,b:2.5,y:0.22,size:0.34,style:'neg',color:'#FFFFFF'};
+const HOOKDEF={enabled:false,text:'',a:0,b:2.5,y:0.22,size:0.34,style:'neg',color:'#FFFFFF',outlineOn:false,outline:0.004,outlineColor:'#000000',shadowOn:false,shadow:0.006,shadowBlur:0.008,shadowOpacity:0.5};
+// the size it really renders at: never wider than 94% of the frame (same rule as glorious.py hook_geom)
+function hookEm(h,sw){const lines=h.text.split('|').map(x=>x.trim()).filter(Boolean);let em=h.size*sw;if(!lines.length)return em;_mc.font=`${em}px 'cap-intertight-black'`;const wid=Math.max(...lines.map(x=>_mc.measureText(x).width*0.97));return em*Math.min(1,0.94*sw/wid)}
 const hook=()=>Object.assign({},HOOKDEF,S.proj.hook||{});
-function drawHook(t){const el=$('#hookBox'),h=hook();if(!h.enabled||!h.text||t<h.a||t>h.b+(h.style==='card'?0:0.35)){el.style.display='none';return}
+const hkSizeTxt=h=>{const r=Math.round(h.size*1080),e=h.style==='card'?r:Math.round(hookEm(h,1080));return e<r?`${e} (max)`:String(r)};
+function seekHook(){const h=hook();if(main.currentTime<h.a||main.currentTime>h.b)seek(h.a+0.8);else drawHook(main.currentTime)}
+function drawHook(t){const el=$('#hookBox'),h=hook();hookDeco(null);if(!h.enabled||!h.text||t<h.a||t>h.b+(h.style==='card'?0:0.35)){el.style.display='none';return}
   if(h.style==='card'){const sw=$('#stage').clientWidth,sh=$('#stage').clientHeight,s=sw/1080,k='card'+h.text+h.size+sw; // her text card, in front (same as glorious.py hook_card_png)
     if(el._k!==k){el._k=k;el.innerHTML=h.text.split('|').map(x=>x.trim()).filter(Boolean).map(l=>escH(l).split('*').map((p,i)=>i%2?`<span style="font-family:'cap-instrument-i';font-size:1.39em;font-weight:normal">${p}</span>`:p).join('')).join('<br>')}
     const fi=h.a>0.01?Math.min(1,(t-h.a)/0.25):1,fo=Math.max(0,Math.min(1,(h.b-t)/0.25));el.className='';
@@ -792,12 +799,28 @@ function drawHook(t){const el=$('#hookBox'),h=hook();if(!h.enabled||!h.text||t<h
       boxShadow:`0 ${10*s}px ${36*s}px rgba(0,0,0,.27)`,opacity:String(fi*fo)});return}
   Object.assign(el.style,{left:'',textAlign:'',fontFamily:'',lineHeight:'',background:'',borderLeft:'',padding:'',boxShadow:''});
   const sw=$('#stage').clientWidth,sh=$('#stage').clientHeight,lines=h.text.split('|').map(x=>x.trim()).filter(Boolean);
-  let em=h.size*sw;_mc.font=`${em}px 'cap-intertight-black'`;const wid=Math.max(...lines.map(x=>_mc.measureText(x).width*0.97));em*=Math.min(1,0.94*sw/wid);
+  const em=hookEm(h,sw);
   const k=el.dataset.k=h.text+em;if(el._k!==k){el._k=k;el.innerHTML=lines.map(escH).join('<br>')}
   const p=Math.min(1,(t-h.a)/0.65),e=1-Math.pow(1-p,3),fi=Math.min(1,(t-h.a)/0.5),fo=t>h.b?Math.max(0,1-(t-h.b)/0.35):1;
   el.className=h.style==='neg'?'neg':'';el.style.color=h.style==='neg'?'#fff':(h.style==='white'?'#FCFCFC':h.color);
-  Object.assign(el.style,{display:'block',fontSize:em+'px',letterSpacing:'-0.03em',opacity:String(fi*fo),top:(h.y*sh)+'px',
-    transform:`translate(-50%,-50%) translateY(${0.045*sh*(1-e)}px) scale(${0.96+0.04*e})`})}
+  const geo={fontSize:em+'px',letterSpacing:'-0.03em',opacity:String(fi*fo),top:(h.y*sh)+'px',transform:`translate(-50%,-50%) translateY(${0.045*sh*(1-e)}px) scale(${0.96+0.04*e})`};
+  Object.assign(el.style,{display:'block'},geo);
+  if(h.outlineOn||h.shadowOn)hookDeco(h,em,lines,fi*fo)}
+// outline + drop shadow of the hook word, drawn on a canvas above it with the letters cut out, so the word itself shows
+// exactly as rendered (glorious.py draws them under the word fill; in the render they sit behind you too)
+function hookDeco(h,em,lines,op){const cv=$('#hookDeco'),st=$('#stage'),dpr=window.devicePixelRatio||1,W=st.clientWidth,H=st.clientHeight;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  const g=cv.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,cv.width,cv.height);if(!h)return;
+  const r=$('#hookBox').getBoundingClientRect(),sr=st.getBoundingClientRect(),lh=0.92*em,sc=r.height/(lines.length*lh)||1;
+  g.setTransform(dpr*sc,0,0,dpr*sc,dpr*(r.left-sr.left+r.width/2),dpr*(r.top-sr.top+r.height/2));
+  g.font=`${em}px 'cap-intertight-black'`;g.letterSpacing=(-0.03*em)+'px';g.textAlign='center';g.textBaseline='alphabetic';g.globalAlpha=op;
+  const m=g.measureText('Hg'),A=m.fontBoundingBoxAscent,D=m.fontBoundingBoxDescent,ys=lines.map((_,i)=>-lines.length*lh/2+i*lh+(lh-(A+D))/2+A);
+  const ol=h.outlineOn?h.outline*W:0;g.lineJoin='round';
+  const pass=(fn)=>lines.forEach((l,i)=>fn(l,0,ys[i]));
+  if(h.shadowOn){g.shadowColor=`rgba(0,0,0,${h.shadowOpacity})`;g.shadowOffsetX=g.shadowOffsetY=h.shadow*W*dpr*sc;g.shadowBlur=h.shadowBlur*W*2*dpr*sc;
+    g.fillStyle='#000';g.strokeStyle='#000';g.lineWidth=2*ol;pass((l,x,y)=>{g.fillText(l,x,y);if(ol)g.strokeText(l,x,y)});g.shadowColor='transparent'}
+  if(ol){g.strokeStyle=h.outlineColor;g.lineWidth=2*ol;pass((l,x,y)=>g.strokeText(l,x,y))}
+  g.globalAlpha=1;g.globalCompositeOperation='destination-out';pass((l,x,y)=>g.fillText(l,x,y));g.globalCompositeOperation='source-over'}
 function drawHL(s){const h=$('#hlBox');if(!s||!s.headline){h.style.display='none';return}
   const sw=$('#stage').clientWidth,p=s.headline.split('|').map(x=>x.trim()).filter(Boolean).slice(0,2);
   const big=x=>`<div style="font-family:'cap-intertight-b';font-size:${.26*sw}px;letter-spacing:-0.02em">${escH(x)}</div>`;
@@ -842,6 +865,13 @@ function drawCaption(t){
 function capChanged(full){S.capCache=null;lastChunk=null;$('#capBox').dataset.key='';applyCapStyle();drawCaption(main.currentTime);S.dirty=true;setStatus();
   if(full){if(S.tab==='cap')renderCapPanel();renderTimeline()}}
 new ResizeObserver(()=>{if(S.proj){applyCapStyle();$('#capBox').dataset.key='';drawCaption(main.currentTime)}}).observe($('#stage'));
+$('#hookBox').onpointerdown=e=>{
+  if(!S.proj)return;e.preventDefault();e.stopPropagation();const el=e.currentTarget,st=$('#stage').getBoundingClientRect(),o={y:hook().y,cy:e.clientY};
+  el.setPointerCapture(e.pointerId);beginEdit();if(!S.proj.hook)S.proj.hook=hook();
+  el.onpointermove=ev=>{S.proj.hook.y=Math.round(Math.max(.04,Math.min(.9,o.y+(ev.clientY-o.cy)/st.height))*1000)/1000;S.dirty=true;drawHook(main.currentTime);
+    const r=$('#hkY');if(r){r.value=S.proj.hook.y;$('#hkYO').textContent=Math.round(S.proj.hook.y*100)+'%'}};
+  el.onpointerup=()=>{el.onpointermove=el.onpointerup=null;endEdit();setStatus()};
+};
 $('#capBox').onpointerdown=e=>{
   if(!S.proj)return;e.preventDefault();const box=e.currentTarget,st=$('#stage').getBoundingClientRect(),c=cfg();
   const o={x:c.x,y:c.y,cx:e.clientX,cy:e.clientY};box.setPointerCapture(e.pointerId);beginEdit();
@@ -875,10 +905,15 @@ function renderCapPanel(){
     ${(()=>{const h=hook();return `<label class="bigtog"><input type="checkbox" id="hkOn"${h.enabled?' checked':''}> Show a big hook word at the start</label>
     <div class="ctl"><label>Word</label><input id="hkText" value="${escH(h.text)}" placeholder="e.g. Breadcrumbed?  or  Bread|crumbing" style="flex:1"></div>
     <div class="ctl"><label>Shows</label><input type="number" id="hkA" step="0.1" min="0" value="${h.a}" style="width:70px"><span class="muted small">to</span><input type="number" id="hkB" step="0.1" min="0" value="${h.b}" style="width:70px"><span class="muted small">s</span><button id="hkSent">Until first sentence ends</button></div>
-    <div class="ctl"><label>Size</label><input type="range" id="hkSize" min="0.03" max="0.55" step="0.005" value="${h.size}"><span class="out" id="hkSizeO">${Math.round(h.size*1080)}</span></div>
-    <div class="ctl"><label>Height</label><input type="range" id="hkY" min="0.06" max="0.6" step="0.005" value="${h.y}"><span class="out" id="hkYO">${Math.round(h.y*100)}%</span></div>
+    <div class="ctl"><label>Size</label><input type="range" id="hkSize" min="0.03" max="0.55" step="0.005" value="${h.size}"><span class="out" id="hkSizeO">${hkSizeTxt(h)}</span></div>
+    <div class="ctl"><label>Height</label><input type="range" id="hkY" min="0.04" max="0.9" step="0.005" value="${h.y}"><span class="out" id="hkYO">${Math.round(h.y*100)}%</span></div>
+    <div class="muted small" id="hkFit"${h.style!=='card'&&hookEm(h,1080)<h.size*1080-0.5?'':' style="display:none"'}>At this size the word fills the width, so making it bigger has no effect. Shorter lines (use |) can go bigger.</div>
     <div class="ctl"><label>Look</label><select id="hkStyle"><option value="neg"${h.style==='neg'?' selected':''}>Negative (inverted picture)</option><option value="white"${h.style==='white'?' selected':''}>White</option><option value="color"${h.style==='color'?' selected':''}>Color</option><option value="card"${h.style==='card'?' selected':''}>Text card (in front)</option></select><input type="color" id="hkColor" value="${h.color}"${h.style==='color'?'':' disabled'}></div>
-    <div class="muted small">Text card: *stars* make serif accent words, emoji work, Height = top of the card, Size = text size. Use | for a line break. It rises in from below and fades out at the end. In the render it sits <b>behind you</b> (your head and hair stay in front); the preview here draws it on top.</div>`})()}
+    ${h.style==='card'?'':`<div class="ctl"><label class="tog" style="width:92px"><input type="checkbox" id="hkOlOn"${h.outlineOn?' checked':''}> Outline</label><input type="range" id="hkOl" min="0.001" max="0.02" step="0.0005" value="${h.outline}"><span class="out" id="hkOlO">${Math.round(h.outline*1080)}</span><input type="color" id="hkOlC" value="${h.outlineColor}"></div>
+    <div class="ctl"><label class="tog" style="width:92px"><input type="checkbox" id="hkShOn"${h.shadowOn?' checked':''}> Shadow</label><input type="range" id="hkSh" min="0" max="0.03" step="0.0005" value="${h.shadow}"><span class="out" id="hkShO">${Math.round(h.shadow*1080)}</span></div>
+    <div class="ctl"><label>Shadow blur</label><input type="range" id="hkShB" min="0" max="0.03" step="0.0005" value="${h.shadowBlur}"><span class="out" id="hkShBO">${Math.round(h.shadowBlur*1080)}</span></div>
+    <div class="ctl"><label>Shadow dark</label><input type="range" id="hkShD" min="0" max="1" step="0.05" value="${h.shadowOpacity}"><span class="out" id="hkShDO">${Math.round(h.shadowOpacity*100)}%</span></div>`}
+    <div class="muted small">Drag the word on the preview to move it up or down. Text card: *stars* make serif accent words, emoji work, Height = top of the card, Size = text size. Use | for a line break. It rises in from below and fades out at the end. In the render it sits <b>behind you</b> (your head and hair stay in front); the preview here draws it on top.</div>`})()}
     <h4>Style presets</h4>
     <div class="presets">${PRESETS.map(p=>{const f=S.fontMap[p.s.font]||{};const s=effPreset(p);
       const st=`font-family:'cap-${s.font}';color:${s.color};${s.box?`background:${s.boxColor};padding:2px 6px;`:''}${s.outline?`-webkit-text-stroke:${Math.max(1,s.outline*400)}px ${s.outlineColor};`:''}font-size:${Math.min(20,s.size*230)}px;line-height:1.1`;
@@ -946,7 +981,11 @@ ${c.engine==='glorious'?`    <h4>Glorious</h4>
   $('#hkA').onchange=e=>{pushUndo();hset('a',r2(+e.target.value));seek(hook().a+0.7)};
   $('#hkB').onchange=e=>{pushUndo();hset('b',r2(+e.target.value))};
   $('#hkSent').onclick=()=>{pushUndo();const W=S.proj.words,i=W.findIndex(w=>w.s>=hook().a&&/[.!?]$/.test(w.w));if(i>=0)hset('b',r2(W[i].e+0.2),true)};
-  for(const [id,k,o,f] of [['hkSize','size','hkSizeO',v=>Math.round(v*1080)],['hkY','y','hkYO',v=>Math.round(v*100)+'%']]){const el=$('#'+id);
+  for(const [id,k] of [['hkOlOn','outlineOn'],['hkShOn','shadowOn']]){const el=$('#'+id);if(el)el.onchange=e=>{pushUndo();hset(k,e.target.checked);seekHook()}}
+  if($('#hkOlC'))$('#hkOlC').oninput=e=>{hset('outlineColor',e.target.value);seekHook()};
+  const px=v=>Math.round(v*1080);
+  for(const [id,k,o,f,on] of [['hkSize','size','hkSizeO',()=>hkSizeTxt(hook())],['hkY','y','hkYO',v=>Math.round(v*100)+'%'],['hkOl','outline','hkOlO',px,'outlineOn'],['hkSh','shadow','hkShO',px,'shadowOn'],['hkShB','shadowBlur','hkShBO',px,'shadowOn'],['hkShD','shadowOpacity','hkShDO',v=>Math.round(v*100)+'%','shadowOn']]){const el=$('#'+id);if(!el)continue;
+    el.addEventListener('input',()=>{if(on&&!hook()[on]){hset(on,true);$('#'+(on==='outlineOn'?'hkOlOn':'hkShOn')).checked=true}if(id==='hkSize'){const h=hook();h.size=+el.value;$('#hkFit').style.display=h.style!=='card'&&hookEm(h,1080)<h.size*1080-0.5?'':'none'}});
     el.onpointerdown=beginEdit;el.oninput=()=>{hset(k,+el.value);$('#'+o).textContent=f(+el.value);if(main.currentTime<hook().a||main.currentTime>hook().b)seek(hook().a+0.8)};el.onchange=()=>endEdit()}
   $('#hkStyle').onchange=e=>{pushUndo();const v=e.target.value,was=hook().style;if(v==='card'&&was!=='card'){hset('size',0.052);hset('y',0.6)}else if(v!=='card'&&was==='card'){hset('size',0.34);hset('y',0.22)}hset('style',v,true)};
   $('#hkColor').oninput=e=>hset('color',e.target.value);

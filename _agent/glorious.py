@@ -297,19 +297,35 @@ def face_at(S,t):
         if len(fs): x,y,w,h=max(fs,key=lambda r:r[2]); pts.append(((x+w/2)/q,(y+h/2)/q))
     return [float(v) for v in np.median(np.array(pts),axis=0)] if pts else [S["W"]/2,S["H"]*0.4]
 
-def hook_ass(S,F):
-    """Big hook word: Inter Tight Black, tight tracking, rises from below ('sunrise') and fades in, fades out at the end.
-    Rendered white-on-black as a mask; the renderer fills it with the inverted picture (or a color) behind her."""
-    W,H=S["W"],S["H"]; hk=S["p"]["hook"]; a,b=hk["a"],hk["b"]; lines=[x for x in re.split(r"\s*\|\s*",hk["text"]) if x]
+def hook_geom(S,F):
+    """Size and position of the hook word (shared by the word mask and its outline/shadow)."""
+    W,H=S["W"],S["H"]; hk=S["p"]["hook"]; lines=[x for x in re.split(r"\s*\|\s*",hk["text"]) if x]
     em=float(hk.get("size",0.34))*W; fnt=F.pil("black",em)
-    wid=max(fnt.getlength(x)*(1-0.03) for x in lines); em*=min(1.0,0.94*W/wid)
-    fs=F.fs("black",em); y=float(hk.get("y",0.22))*H; d=int((b-a)*1000); rise=0.045*H
-    txt="\\N".join(esc(x) for x in lines)
-    ev=(f"Dialogue: 0,{ts(a)},{ts(b+0.35)},G,,0,0,0,,{{\\an5\\move({W/2:.0f},{y+rise:.0f},{W/2:.0f},{y:.0f},0,650)\\fn{FONTS['black'][0]}\\fs{fs:.0f}"
-        f"\\fsp{-0.03*em:.1f}\\q2\\bord0\\shad0\\1c&HFFFFFF&\\fscx96\\fscy96\\alpha&HFF&\\t(0,500,0.6,\\alpha&H00&\\fscx100\\fscy100)\\t({d},{d+350},\\alpha&HFF&)}}{txt}")
+    wid=max(fnt.getlength(x)*(1-0.03) for x in lines); em*=min(1.0,0.94*W/wid)   # never wider than the frame
+    return lines,em,float(hk.get("y",0.22))*H
+
+def hook_ass(S,F,deco=False):
+    """Big hook word: Inter Tight Black, tight tracking, rises from below ('sunrise') and fades in, fades out at the end.
+    Rendered white-on-black as a mask; the renderer fills it with the inverted picture (or a color) behind her.
+    deco=True: its outline and drop shadow instead (hook.outline/outlineColor, hook.shadow/shadowBlur/shadowOpacity, fractions
+    of the width like the caption ones; added 2026-11-07), drawn in color under the word, or None when both are off."""
+    W,H=S["W"],S["H"]; hk=S["p"]["hook"]; a,b=hk["a"],hk["b"]; lines,em,y=hook_geom(S,F)
+    fs=F.fs("black",em); d=int((b-a)*1000); rise=0.045*H; txt="\\N".join(esc(x) for x in lines)
+    def ev(layer,dx,tags,fin,fout):
+        return (f"Dialogue: {layer},{ts(a)},{ts(b+0.35)},G,,0,0,0,,{{\\an5\\move({W/2+dx:.0f},{y+rise+dx:.0f},{W/2+dx:.0f},{y+dx:.0f},0,650)\\fn{FONTS['black'][0]}\\fs{fs:.0f}"
+                f"\\fsp{-0.03*em:.1f}\\q2\\fscx96\\fscy96{tags}\\t(0,500,0.6,{fin}\\fscx100\\fscy100)\\t({d},{d+350},{fout})}}{txt}")
+    if not deco: evs=[ev(0,0,"\\bord0\\shad0\\1c&HFFFFFF&\\alpha&HFF&","\\alpha&H00&","\\alpha&HFF&")]
+    else:
+        ol=float(hk.get("outline",0) or 0)*W if hk.get("outlineOn") else 0; sh=float(hk.get("shadow",0) or 0)*W if hk.get("shadowOn") else 0; evs=[]
+        if sh>0:
+            al=f"&H{round((1-float(hk.get('shadowOpacity',0.5)))*255):02X}&"
+            evs.append(ev(0,sh,f"\\bord{ol:.1f}\\shad0\\1c&H000000&\\3c&H000000&\\blur{float(hk.get('shadowBlur',0.006))*W:.1f}\\alpha&HFF&",f"\\alpha{al}","\\alpha&HFF&"))
+        if ol>0:
+            evs.append(ev(1,0,f"\\bord{ol:.1f}\\shad0\\1a&HFF&\\3c{hexass(hk.get('outlineColor','#000000'))}\\3a&HFF&","\\3a&H00&","\\3a&HFF&"))
+        if not evs: return None
     return (f"[Script Info]\nScriptType: v4.00+\nPlayResX: {W}\nPlayResY: {H}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\n"
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-            "Style: G,GL Sans Black,80,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"+ev+"\n")
+            "Style: G,GL Sans Black,80,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"+"\n".join(evs)+"\n")
 
 EMOJI_FONT="/System/Library/Fonts/Apple Color Emoji.ttc"
 def _is_emoji(ch): o=ord(ch); return o>=0x1F000 or 0x2600<=o<0x27C0 or o in (0xFE0F,0x200D)
@@ -523,11 +539,19 @@ def chunk(pp,wd,n):
         if not os.path.exists(hm) or not os.path.exists(meta) or json.load(open(meta))!=want:
             hookmask(pp,wd); json.dump(want,open(meta,"w"))
         hp=os.path.join(wd,"glo_hook.ass"); open(hp,"w").write(hook_ass(S,Fonts(FONTDIR)))
+        dk=hook_ass(S,Fonts(FONTDIR),deco=True)   # outline / drop shadow, also behind her
         inputs+=["-i",hm,"-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=black:s={W}x{H}:r={fps}"]; pm=k; tm=k+1; k+=2
-        f+=[f"[{pm}:v]fps={fps},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS+{hk['a']-0.0:.6f}/TB"+(f",{zoomf}" if zoomf else "")+",format=gray[pmask]",
+        f+=[f"[{pm}:v]fps={fps},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS+{hk['a']-0.0:.6f}/TB"+(f",{zoomf}" if zoomf else "")+",format=gray"+(",split[pmask][pmask2]" if dk else "[pmask]"),
             f"[{tm}:v]setpts=PTS-STARTPTS+{t0:.6f}/TB,subtitles=filename={fesc(hp)}:fontsdir={fesc(FONTDIR)},format=gray[tmask]",
             "[tmask][pmask]blend=all_expr='A*(255-B)/255',format=gray[hmask]",
-            f"[{last}]split[hb][hv]"]
+            f"[{last}]split[hb0][hv]"]
+        if dk:
+            dp=os.path.join(wd,"glo_hookdeco.ass"); open(dp,"w").write(dk)
+            inputs+=["-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=black@0.0:s={W}x{H}:r={fps},format=rgba"]; dm=k; k+=1
+            f+=[f"[{dm}:v]setpts=PTS-STARTPTS+{t0:.6f}/TB,subtitles=filename={fesc(dp)}:fontsdir={fesc(FONTDIR)}:alpha=1,format=rgba,split[dkc][dka]",
+                "[dka]alphaextract[dkal]","[dkal][pmask2]blend=all_expr='A*(255-B)/255'[dkam]","[dkc][dkam]alphamerge[dkw]",
+                "[hb0][dkw]overlay=eof_action=pass:shortest=0[hb]"]
+        else: f.append("[hb0]null[hb]")
         if hk.get("style","neg")=="neg": f.append("[hv]negate[hfill]")
         else: f.append(f"[hv]drawbox=c={hk.get('color','#FFFFFF')}:t=fill[hfill]")
         f+=["[hfill][hmask]alphamerge[hword]","[hb][hword]overlay=eof_action=pass:shortest=0[hk]"]; last="hk"
