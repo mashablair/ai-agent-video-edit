@@ -14,6 +14,8 @@ Maria adds raw videos and photos (.mov, .MOV, .heic, .jpg, .png) to `~/Desktop/b
   - `_catalog/CATALOG.md` has the theme finder, clip tables, "Sources already processed", "Skipped footage" and "Usage log".
   - `_catalog/build_clips.py` cuts every clip in clips.json that doesn't exist yet. Use `--only=20` to batch it within the 180-second limit. Pass clip ids to force a rebuild.
   - `_catalog/stills/` holds JPG copies of photos.
+  - `stock originals/` holds the full stock videos she downloads (renamed from `broll/` on 2026-11-07). Move new stock downloads from the top level into it before cutting; their clips get `stock-` ids, `"stock": true` and `src: "stock originals/<file>"`.
+  - `READ ME.txt` at the top explains the folders to her. Keep it accurate if the layout changes.
   - `_catalog/previews/` and `_catalog/thumbs/` hold contact sheets and clip thumbnails.
 - If the folder isn't connected, ask her to add it in the Claude desktop app.
 - Deleting is off in her folders; move junk to `_catalog/_to_delete/`.
