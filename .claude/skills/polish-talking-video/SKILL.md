@@ -54,6 +54,7 @@ Each chat gets a fresh workspace on her Mac, so load the tools from here instead
 6. **Video.** Run `python3 ~/vidpolish/polish.py chunk ~/vp/<name> N` for every chunk. Two or three chunks fit in one call; each takes about 30–50 seconds. Rendering is frame-exact (each piece gets exactly its share of frames, so video never drifts from the audio).
 7. **Assemble.** Run `python3 ~/vidpolish/polish.py assemble ~/vp/<name> ~/vp/<name>/final.mp4`. The frame count must say OK.
 8. **Check the result.** Run `python3 ~/vidpolish/polish.py qa ~/vp/<name> ~/vp/<name>/final.mp4`.
+   - Check "long gaps" (dead air the squeeze missed, in output time; added 2026-11-08 after IMG_0959). In noisy outdoor audio (waves, wind, traffic) the pause detector misses gaps, so every one listed is a candidate: trim it with a `delete_times` cut at the quiet points (look at the dB profile), or cut the drawn-out connective it sits around (see "Slow or outdoor talk" below). Best done before the video render: after `audio`, re-transcribe `audio.m4a` and check the gaps there first.
    - Check "fillers left" and "doubled words". To fix one, map the output time back to source time through plan.json (segs/off), look at the 10 ms dB profile of a16.wav around it to find the exact burst, add a `delete_times` cut, then re-run plan, audio, all chunks and assemble.
    - Read the FINAL TRANSCRIPT once more for anything that still rambles or reads broken.
 9. **Deliver to `<her folder>/Videos/<name>/`:**
@@ -99,7 +100,14 @@ She offered to supply before/after examples of her manual fixes. When she has sa
 - **No slivers at word-level cuts (1103-1):** in fast speech, a cut word's edge often leaves a 50–250 ms sliver of it ("ple-" before "pleasant", "your" after "Create", a breath-word before "As a 45-year-old"); she moved those edges to the next word's onset herself. For every word-level cut with no pause around it, check the 10 ms dB profile and put the edge at the quietest point right before the kept word starts. Read the KEPT TEXT for words that crept back (e.g. "women they need to be rescued").
 - **Prefer one clean cut over several micro-cuts in one sentence.** Three tiny cuts in the Tinder sentence sounded choppy. If cutting a small stutter ("v- very") would sound worse, leave it in.
 - **Don't cut where the grammar would break.** For example, "if you kind of interested" stays rather than becoming "if you interested".
-- **Pauses (approved 2026-10-26 from her CapCut re-cut of 1025-1):** long pauses between thoughts lose viewers: cut thinking pauses to ~0.2 s. Keep only silent reaction beats; if the beat holds a stray sound or throwaway word (the "Next." after "they don't show up in your life" in 1103-1), she cuts it. **Exception, the very end:** no silent hold before the closing kiss or sign-off; keep the "mwah" itself but cut the wait before it (her 1103-5 fix). Keep reaction beats (smile, smirk, gesture after a punchline, e.g. "much better." → smile, "when I was 19." → smirk) and dramatic beats ("until … five in the morning") at their natural ~0.5–0.9 s via `keep_pauses`. Pauses are detected relative to the background noise (car hum sits ~-35 dB, above the old fixed -42 dB that let 1–1.3 s pauses through): 6 dB over the local background, capped at -34 dB (2026-11-07; at +4 dB, -38 dB room tone in 1103-5 kept a 0.77 s gap). After a cut word, the next piece starts at the kept word's onset, skipping a breath left between (1103-5: 0.56 s of breath after a cut "Um"). Still read the KEPT TEXT and check after each cut filler that no breath is left.
+- **Slow or outdoor talk (her Cut Editor fix of IMG_0959, a beach-walk vlog, 2026-11-08: 75 s → 62 s; she said my version "was very weak").** When she talks slowly while walking, cut much harder than for a car take:
+  - Dead air inside sentences: she removed every 0.3–1.9 s gap between words ("a date later tonight … and … someone asked me", "I said no … because … sometimes"). No mid-sentence pause survives unless it's a deliberate beat.
+  - Drawn-out connectives: cut a trailing "and…", "then…", "now…" or "but I…" when the sentence works without it ("met with someone, walked on the beach together"; "If you don't enjoy your company, chances are…").
+  - Lists of what she did: fragment style, drop the repeated "I" ("Got some work done. Worked on my course. Talked to my friends.").
+  - Extra alternatives that add nothing: "go for a walk on the beach this morning [or meet for coffee]".
+  - Scenic vlog openings: keep at most the first one or two looks at the view at ~1 s. She cut the third (1.9 s after "Such warm water").
+  - Target for this kind of take: about 55% of the raw length (she kept 62 s of 111 s). If the kept text still has "and… then… so…" joins, it isn't done.
+- **Pauses (approved 2026-10-26 from her CapCut re-cut of 1025-1):** long pauses between thoughts lose viewers: cut thinking pauses to ~0.2 s. Keep only silent reaction beats; if the beat holds a stray sound or throwaway word (the "Next." after "they don't show up in your life" in 1103-1), she cuts it. **Exception, the very end:** no silent hold before the closing kiss or sign-off; keep the "mwah" itself but cut the wait before it (her 1103-5 fix). Keep reaction beats (smile, smirk, gesture after a punchline, e.g. "much better." → smile, "when I was 19." → smirk) and dramatic beats ("until … five in the morning") at their natural ~0.5–0.9 s via `keep_pauses`. Pauses are detected relative to the background noise (car hum sits ~-35 dB, above the old fixed -42 dB that let 1–1.3 s pauses through): 6 dB over the local background, capped at -34 dB (2026-11-07; at +4 dB, -38 dB room tone in 1103-5 kept a 0.77 s gap). After a cut word, the next piece starts at the kept word's onset, skipping a breath left between (1103-5: 0.56 s of breath after a cut "Um"). Still read the KEPT TEXT and check after each cut filler that no breath is left. Since 2026-11-08 (IMG_0959): a word timestamp in the last 0.3 s of a pause no longer blocks the squeeze (slow, noisy speech gets early ASR timestamps); the next piece starts 40 ms before it so a quiet k/t/s onset survives. Before a cut word, the piece ends 0.18 s after the kept word fades (a word's end time runs to the next word, so noise used to ride up to the cut).
 - **Pause squeezing:** dead air is squeezed to a short breath (`max_pause`), but the script still extends phrase edges until the voice fades, so words aren't clipped. Don't tighten the voice-fade padding; she complained about clipped words. Fixing clipped words, abrupt joins and missed fillers by hand used to take her the most time; that's what the Cut Editor is for.
 - **Speed:** keep normal speed. She speeds up manually in CapCut when she wants to.
 
@@ -321,6 +329,11 @@ def auto_segs(W,dur,E,db,fps):
                 q=q+1 if sm[j]<th[j] else 0
                 if q>=8: onset=j+1   # end of the last quiet run of >=80 ms before the word
             if onset is not None: g["s"]=max(g["s"],onset/100-0.08)
+        if i1+1<len(W) and i1+1 in DEL:   # before a cut word: end where the kept word fades (her IMG_0959 fix: a word's end time runs to the next word, so wave noise rode to the cut)
+            k0,k1=ix(W[i1]["s"]+0.12),ix(g["e"]); q=0
+            for j in range(k0,k1):
+                q=q+1 if sm[j]<th[j] else 0
+                if q>=15: g["e"]=min(g["e"],(j-14)/100+0.18); break   # 150 ms of quiet; 0.18 s tail keeps a soft t/s ending
     for k in range(1,len(segs)):
         if segs[k]["s"]<segs[k-1]["e"]: segs[k]["s"]=segs[k-1]["e"]
     for a,b in KP:   # a kept pause between two phrases: join them so the whole beat stays
@@ -351,11 +364,14 @@ def auto_segs(W,dur,E,db,fps):
                 else: i+=1
             pieces=[[x,y]]
             for qa_,qb_ in runs:
-                if qb_-qa_<MP or any(qa_<b and qb_>a for a,b in KP) or any(qa_+0.03<w<qb_-0.08 for w in WS): continue
+                # a word starting well inside the run is soft speech: leave it. One in the last 0.3 s is usually an early ASR timestamp
+                # (slow, noisy speech in IMG_0959 kept 0.4-0.8 s pauses this way), so squeeze it but start 40 ms before that timestamp
+                if qb_-qa_<MP or any(qa_<b and qb_>a for a,b in KP) or any(qa_+0.03<w<qb_-0.3 for w in WS): continue
+                lead=min([qb_-0.08]+[w-0.04 for w in WS if qa_+0.03<w<qb_])
                 # 0.12 s of tail after the voice fades, 0.08 s of lead-in: ~0.2 s thinking pause, like her CapCut re-cut
-                if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],qb_-0.08)
+                if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],lead)
                 elif qb_>=y-0.011: pieces[-1][1]=min(pieces[-1][1],qa_+0.12)
-                else: pieces[-1][1]=qa_+0.12; pieces.append([qb_-0.08,y])
+                else: pieces[-1][1]=qa_+0.12; pieces.append([lead,y])
             o2+=[{"s":u,"e":v} for u,v in pieces if v-u>0.05]
         out=o2
     F=1/fps
@@ -602,6 +618,9 @@ def qa(wd,out):
     print("fillers left:",left)
     ws=[w["w"].lower().strip(",.?!") for w in words]
     print("doubled words:",[(round(words[i]["s"],1),ws[i]) for i in range(1,len(ws)) if ws[i]==ws[i-1]])
+    # dead air the squeeze missed (noisy outdoor audio): >0.45 s mid-sentence or >0.8 s anywhere, in output time
+    print("long gaps:",[(round(words[i-1]["s"],1),words[i-1]["w"],words[i]["w"],round(words[i]["s"]-words[i-1]["s"]-0.35,1)) for i in range(1,len(words))
+        if words[i]["s"]-words[i-1]["s"]-0.35>(0.8 if words[i-1]["w"][-1:] in ".?!" else 0.45)])
     off,z=P["off"],P["z"]; ts=[off[k]+1.5 for k in range(1,len(z)) if z[k] and not z[k-1]]
     ts+=[e["t"]+1 for e in P["events"]]+([1.5] if P["hook"] else [])
     ts=sorted(t/P.get("speed",1.0) for t in ts if t<off[-1])[:12]

@@ -197,6 +197,11 @@ def auto_segs(W,dur,E,db,fps):
                 q=q+1 if sm[j]<th[j] else 0
                 if q>=8: onset=j+1   # end of the last quiet run of >=80 ms before the word
             if onset is not None: g["s"]=max(g["s"],onset/100-0.08)
+        if i1+1<len(W) and i1+1 in DEL:   # before a cut word: end where the kept word fades (her IMG_0959 fix: a word's end time runs to the next word, so wave noise rode to the cut)
+            k0,k1=ix(W[i1]["s"]+0.12),ix(g["e"]); q=0
+            for j in range(k0,k1):
+                q=q+1 if sm[j]<th[j] else 0
+                if q>=15: g["e"]=min(g["e"],(j-14)/100+0.18); break   # 150 ms of quiet; 0.18 s tail keeps a soft t/s ending
     for k in range(1,len(segs)):
         if segs[k]["s"]<segs[k-1]["e"]: segs[k]["s"]=segs[k-1]["e"]
     for a,b in KP:   # a kept pause between two phrases: join them so the whole beat stays
@@ -227,11 +232,14 @@ def auto_segs(W,dur,E,db,fps):
                 else: i+=1
             pieces=[[x,y]]
             for qa_,qb_ in runs:
-                if qb_-qa_<MP or any(qa_<b and qb_>a for a,b in KP) or any(qa_+0.03<w<qb_-0.08 for w in WS): continue
+                # a word starting well inside the run is soft speech: leave it. One in the last 0.3 s is usually an early ASR timestamp
+                # (slow, noisy speech in IMG_0959 kept 0.4-0.8 s pauses this way), so squeeze it but start 40 ms before that timestamp
+                if qb_-qa_<MP or any(qa_<b and qb_>a for a,b in KP) or any(qa_+0.03<w<qb_-0.3 for w in WS): continue
+                lead=min([qb_-0.08]+[w-0.04 for w in WS if qa_+0.03<w<qb_])
                 # 0.12 s of tail after the voice fades, 0.08 s of lead-in: ~0.2 s thinking pause, like her CapCut re-cut
-                if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],qb_-0.08)
+                if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],lead)
                 elif qb_>=y-0.011: pieces[-1][1]=min(pieces[-1][1],qa_+0.12)
-                else: pieces[-1][1]=qa_+0.12; pieces.append([qb_-0.08,y])
+                else: pieces[-1][1]=qa_+0.12; pieces.append([lead,y])
             o2+=[{"s":u,"e":v} for u,v in pieces if v-u>0.05]
         out=o2
     F=1/fps
@@ -478,6 +486,9 @@ def qa(wd,out):
     print("fillers left:",left)
     ws=[w["w"].lower().strip(",.?!") for w in words]
     print("doubled words:",[(round(words[i]["s"],1),ws[i]) for i in range(1,len(ws)) if ws[i]==ws[i-1]])
+    # dead air the squeeze missed (noisy outdoor audio): >0.45 s mid-sentence or >0.8 s anywhere, in output time
+    print("long gaps:",[(round(words[i-1]["s"],1),words[i-1]["w"],words[i]["w"],round(words[i]["s"]-words[i-1]["s"]-0.35,1)) for i in range(1,len(words))
+        if words[i]["s"]-words[i-1]["s"]-0.35>(0.8 if words[i-1]["w"][-1:] in ".?!" else 0.45)])
     off,z=P["off"],P["z"]; ts=[off[k]+1.5 for k in range(1,len(z)) if z[k] and not z[k-1]]
     ts+=[e["t"]+1 for e in P["events"]]+([1.5] if P["hook"] else [])
     ts=sorted(t/P.get("speed",1.0) for t in ts if t<off[-1])[:12]
