@@ -14,55 +14,40 @@ It does NOT add visuals: no hook title, no list cards, no zooms, no captions, no
 
 Deliver ONE finished cleaned video without asking her to approve a first test.
 
-## Where it runs
-The work has to run on Maria's Mac, using the remote-devices `device_bash` tool.
-- She keeps her videos in `~/Desktop/AI agent video edit`. Inside `device_bash` that folder is `$HOME/mnt/AI agent video edit`.
-- If that folder isn't connected, ask her to add it with "Add folder" in the Claude desktop app. New raw videos should go into this folder, because it also holds the saved tools.
-- In the cloud workspace, Hugging Face and most other sites are blocked. On her Mac, GitHub, PyPI and npm are reachable.
-- Each `device_bash` call is capped at 180 seconds and background processes are killed when the call ends. That's why the script works in stages: each stage, and each render chunk, fits in one call.
-- Keep the work directory in `~` (for example `~/vp/<name>`), never in her folder. Put only the deliverables in `<her folder>/Videos/<name>/` (her raw videos are in `Drop raw videos here/`). Never touch or delete her original file.
-
-## Saved tools (`_agent` folder on her Mac)
-`AI agent video edit/_agent/` holds the following, about 700 MB:
-- `polish.py`, the latest script (always prefer it over the copy embedded below if they differ)
-- `wheels/`, the Python packages
-- the Parakeet speech model
-- `sh.rnnn`, the noise-reduction model
-- `VERSION.txt`, the date, versions and change notes
-- `cut/<name>/`, the Cut Editor's files per video (`proxy.mp4`, `voice.wav`) and `cut/Cut Editor (backup).html`
-
-Each chat gets a fresh workspace on her Mac, so load the tools from here instead of downloading them:
-- **Saved copy exists:** `mkdir -p ~/vidpolish && cp "$HOME/mnt/AI agent video edit/_agent/polish.py" ~/vidpolish/ && python3 ~/vidpolish/polish.py setup`. This takes a few seconds.
-- **Saved copy is gone** (she deleted it to refresh): write the script below to `~/vidpolish/polish.py`, then run `python3 ~/vidpolish/polish.py setup`. It downloads everything (about 3 minutes) and re-saves `_agent`.
-- **She asks to update the tools:** run `python3 ~/vidpolish/polish.py setup --refresh`. It upgrades the packages, re-downloads, and re-saves `_agent` with a new date. Test on a short clip afterwards. If a newer or better speech model is adopted, change `MODEL_NAME` and the recognizer call, and keep the rest of the pipeline.
+## Where things are (this Mac)
+- Her folder: `~/Desktop/AI agent video edit` (run commands from there). Raw videos: `Drop raw videos here/` (never touch them). Deliverables: `Videos/<name>/`.
+- Work dirs: `~/vp/<name>`, never in her folder.
+- Python: `PY=~/vidpolish/.venv/bin/python`. Script: `_agent/polish.py` (call it from there; `~/vidpolish/polish.py` is a copy kept in sync). Speech model, `sh.rnnn` and fonts are already installed; never run `polish.py setup` here (its wheels are Linux-only).
+- Look at images (frame strips, contact sheets) with the Read tool.
+- No time limits: run a whole stage chain in one command; long renders can run in the background.
 
 ## Steps
-1. **Setup** (see above).
-2. **Transcribe.** Run `python3 ~/vidpolish/polish.py transcribe "<video>" ~/vp/<name>`. It prints an indexed word list (`idx:word@start [gap]`) plus FILLERS and REPEATS lists. Parakeet DOES transcribe "uh/um".
-3. **Decide the cuts yourself** by reading the transcript, then write `~/vp/<name>/edits.json`:
+In the commands, `PY=~/vidpolish/.venv/bin/python`, `POL=_agent/polish.py`, `WD=~/vp/<name>`.
+1. **Transcribe.** `$PY $POL transcribe "Drop raw videos here/<file>" $WD`. It prints an indexed word list (`idx:word@start [gap]`) plus FILLERS and REPEATS lists. Parakeet DOES transcribe "uh/um". With several new videos, transcribe them all first, then decide each one's cuts.
+2. **Decide the cuts yourself** by reading the transcript like a viewer (see "Editing rules"), then write `$WD/edits.json`:
    ```json
    {"delete_words": [[a,b,"filler"], [c,d,"restart"], ...],
     "delete_times": [[t1,t2], ...],
+    "keep_pauses": [[t1,t2], ...],
     "max_pause": 0.2}
    ```
    - `delete_words` are inclusive word-index ranges. Give each a reason, shown as a label in her Cut Editor: `filler` (um/uh/you know/like/basically), `restart` (false start, she re-says it), `repeat` (doubled word or phrase), `ramble` (whole muddled stretch), `stumble` (half-word, slip), `trim` (anything else).
-   - `delete_times` are source-time cuts for fillers or doubled words the transcript missed.
+   - `delete_times` are raw-time cuts for fillers, slivers or dead air the word list doesn't cover.
+   - `keep_pauses` are raw ranges of reaction beats to keep (step 3).
    - `max_pause` (default 0.2 s) squeezes dead air to a short breath, matching her own CapCut pass.
    - Leave out `hook`, `cards`, `zoom` and `speed`. The script defaults to no overlays, no zoom and normal speed. Add one only if she explicitly asks for it on that video (`"zoom": true` gives the face-anchored 1.22x zooms; `"speed": 1.1` speeds up with pitch preserved).
-4. **Plan.** Run `python3 ~/vidpolish/polish.py plan ~/vp/<name>`, then `python3 ~/vidpolish/polish.py pauses ~/vp/<name>` and view `pauses.jpg` (3 frames per pause >=0.4 s). Thinking pauses are squeezed to ~0.2 s automatically; for any pause where she smiles, smirks, rolls her eyes, gestures, or holds a deliberate dramatic beat, add its raw range to `"keep_pauses": [[t1,t2], ...]` in edits.json and plan again. List the kept beats in the cut list. It prints the final length, segment count, chunk count and the KEPT TEXT. Read the kept text like a viewer would (see "Editing rules"). If a sentence reads broken or a passage rambles, adjust `edits.json` and plan again.
-5. **Audio.** Run `python3 ~/vidpolish/polish.py audio ~/vp/<name>`. Studio voice is applied to the whole raw take first (`voice.wav`, the same audio her Cut Editor plays), then cut with 12 ms fades and normalized to -14 LUFS.
-6. **Video.** Run `python3 ~/vidpolish/polish.py chunk ~/vp/<name> N` for every chunk. Two or three chunks fit in one call; each takes about 30–50 seconds. Rendering is frame-exact (each piece gets exactly its share of frames, so video never drifts from the audio).
-7. **Assemble.** Run `python3 ~/vidpolish/polish.py assemble ~/vp/<name> ~/vp/<name>/final.mp4`. The frame count must say OK.
-8. **Check the result.** Run `python3 ~/vidpolish/polish.py qa ~/vp/<name> ~/vp/<name>/final.mp4`.
-   - Check "long gaps" (dead air the squeeze missed, in output time; added 2026-11-08 after IMG_0959). In noisy outdoor audio (waves, wind, traffic) the pause detector misses gaps, so every one listed is a candidate: trim it with a `delete_times` cut at the quiet points (look at the dB profile), or cut the drawn-out connective it sits around (see "Slow or outdoor talk" below). Best done before the video render: after `audio`, re-transcribe `audio.m4a` and check the gaps there first.
-   - Check "fillers left" and "doubled words". To fix one, map the output time back to source time through plan.json (segs/off), look at the 10 ms dB profile of a16.wav around it to find the exact burst, add a `delete_times` cut, then re-run plan, audio, all chunks and assemble.
-   - Read the FINAL TRANSCRIPT once more for anything that still rambles or reads broken.
-9. **Deliver to `<her folder>/Videos/<name>/`:**
-   - `<name>_clean.mp4`; if that name exists, add _v2, _v3 and so on rather than overwriting.
-   - `<name>_cutlist.txt`: take cutlist.txt and add a "kept on purpose" note.
-   - `<name>_transcript.txt`: a clean, punctuated transcript of the edited version, fixing ASR misspellings such as "MASH.com" for Match.com or "breath crumbing" for breadcrumbing. Step 2 (captions, B-roll) can use it.
-10. **Make it editable:** `python3 ~/vidpolish/polish.py cutproject ~/vp/<name> <name> Videos/<name>/<clean file>` (about 45 s; makes `Videos/<name>/editor files/<name>_cut_project.json` plus a quick-seek proxy and the studio-voice audio in `Videos/<name>/editor files/`). Always do this; it's what lets her fix a cut herself.
-   Then reply briefly: old length to new length, what was cut, anything she should listen for, and always end with how to fix a cut: **"If anything sounds off, open `Editors/Cut Editor.html` in your video folder (or the ✂ Fix cuts button in the B-roll Editor), pick <name>, fix it, Save, and tell me “render my cuts for <name>”."**
+3. **Plan and look at the pauses.** `$PY $POL plan $WD`, then `$PY $POL pauses $WD` and view `$WD/pauses.jpg` (3 frames per pause >=0.4 s, numbered as in the printed list). Thinking pauses are squeezed to ~0.2 s automatically; for any pause where she smiles, smirks, rolls her eyes, gestures, or holds a deliberate dramatic beat, add its raw range to `keep_pauses` and plan again. Plan prints the final length and the KEPT TEXT; the kept text is only a rough guide around squeezed pauses, step 4 is the real check.
+4. **Hear the cut before rendering video.** `$PY $POL audio $WD && $PY $POL hear $WD`. `hear` re-transcribes the cut audio and lists:
+   - `fillers left`, `doubled words` (not across a sentence end: "better now. Now that" is fine),
+   - `long gaps`: real quiet between words (measured against the local background, so wave/wind noise counts as quiet and a stretched word doesn't), with the raw times (`src a-b`) to fix; pauses inside `keep_pauses` are marked `(kept beat)`,
+   - `drawn-out connectives` ("and…", "now…" held over 0.9 s): cut them when the sentence works without (see "Slow or outdoor talk").
+   Also read the HEARD text like a viewer: words that crept back from a cut, broken grammar, a sliver ("I'm s… when" = a half-kept "sometimes").
+   To place a fix, `$PY $POL prof $WD <a> <b>` prints the raw loudness every 20 ms around a spot, the words and kept pieces there, and the quietest points; put a `delete_times` edge at the quiet point right before the kept word. To keep a sliver's whole word instead, shrink the `delete_words` range. Re-run `plan`, `audio`, `hear` until it reads clean. This loop is cheap (seconds); the video render is not.
+5. **Render.** `$PY $POL render $WD` runs plan, audio, every chunk, assemble (`$WD/final.mp4`; the frame count must say OK) and qa (the same report as `hear`, on the final video, plus `$WD/_qa_frames.jpg`). View the contact sheet. Rendering is frame-exact (each piece gets exactly its share of frames, so video never drifts from the audio). Several videos: render them one after another in one background command.
+6. **Deliver.** `$PY $POL deliver $WD <name>`: copies `final.mp4` to `Videos/<name>/<name>_clean.mp4` (or the next `_vN`; never overwrites; an older clean video moves to `_agent/tmp/superseded/`, keeping only the newest), copies the cut list next to it, and writes the cut project (`Videos/<name>/editor files/<name>_cut_project.json` + proxy + studio-voice audio; about 45 s) so she can fix cuts herself. Then write by hand:
+   - in `<name>_cutlist.txt`: a "Kept on purpose:" note (kept beats, anything left in on purpose, anything odd in her raw),
+   - `<name>_transcript.txt`: a clean, punctuated transcript of the edited version, fixing ASR misspellings such as "MASH.com" for Match.com, "breath crumbing" for breadcrumbing, "faith" where she means fate. Step 2 (captions, B-roll) can use it.
+7. **Reply briefly**: a table of old length to new length and what was cut, anything she should listen for, and always end with how to fix a cut: **"If anything sounds off, open `Editors/Video Editor.html` (or `Cut Editor.html`), pick <name>, fix it, Save, and tell me “render my cuts for <name>”."** When done, clear `~/vp` work dirs of videos that are finished (`du -sh ~/vp`).
 
 ## The Cut Editor (added 2026-10-21)
 `Editors/Cut Editor.html` (backup: `_agent/editor-backups/Cut Editor (backup).html`; the B-roll Editor links to it with "✂ Fix cuts", and it links back with "Visuals editor"). Separate from the visuals editor: it works on the RAW video's time. It targets what took her the most time to fix by hand: clipped words, abrupt joins, missed "um"s and "you know"s.
@@ -73,11 +58,11 @@ Each chat gets a fresh workspace on her Mac, so load the tools from here instead
 - **Save** writes `keep` (the kept pieces in raw time, 0.1 ms precision), `ignored` and `status:"edited"` into the cut project.
 
 ## "Render my cuts for <name>"
-If she edited in the Video Editor (`Editors/Video Editor.html`; the visuals project has `cutKeep`), use the glorious-visuals skill's one command, `_agent/render_edits.py <name>`, instead: it renders the cuts and the visuals together. The steps below are for the separate Cut Editor.
-1. Read `Videos/<name>/editor files/<name>_cut_project.json` (status should be `edited`). Compare `keep` with `renderedKeep` so you can tell her what changed (which joins moved, words cut or restored).
-2. `python3 ~/vidpolish/polish.py fromcut "<her folder>/Videos/<name>/editor files/<name>_cut_project.json" ~/vp/<name>_cut` (sets up a work dir with her exact pieces), then `plan`, `audio`, all `chunk`s, `assemble`, `qa` on that work dir as usual. Her cuts are rendered as-is; don't "improve" them. If qa still finds a leftover filler, mention it rather than cutting it.
-3. **If a visuals project exists** (`Videos/<name>/editor files/<name>_broll_project.json`), do this BEFORE step 4 (it needs the old `renderedKeep`): `python3 ~/vidpolish/polish.py remap "<her folder>/Videos/<name>/editor files/<name>_cut_project.json" "<her folder>/Videos/<name>/editor files/<name>_broll_project.json"`. It moves caption words, B-roll slots, cards, zooms and the hook from the old clean timeline to the new one (backup in `_agent/tmp/`), drops caption words that were cut, adds restored words, and flags slots/cards whose edges landed on cut material. Set the visuals project's `video` to the new clean file, tell her what moved or was flagged, and offer to re-render the Glorious version.
-4. Deliver the next `<name>_clean_vN.mp4`, move the superseded clean video into `_agent/tmp/`, then refresh the cut project: `python3 ~/vidpolish/polish.py cutproject ~/vp/<name>_cut <name> Videos/<name>/<name>_clean_vN.mp4` (keeps Claude's reasons and first cut; sets `renderedKeep` and status `rendered`).
+If she edited in the Video Editor (`Editors/Video Editor.html`; the visuals project has `cutKeep`), use the glorious-visuals skill's one command, `_agent/render_edits.py <name>`, instead: it renders the cuts and the visuals together. The steps below are for a cut-only edit (no visuals yet, or the separate Cut Editor).
+1. Read `Videos/<name>/editor files/<name>_cut_project.json` (status should be `edited`; `rendered` means nothing new was saved). Compare `keep` with `renderedKeep` so you can tell her what changed (which joins moved, words cut or restored). The raw video must still be in `Drop raw videos here/`; if it's gone, ask her to put it back.
+2. `$PY $POL fromcut "Videos/<name>/editor files/<name>_cut_project.json" ~/vp/<name>_cut` (a work dir with her exact pieces), then `$PY $POL render ~/vp/<name>_cut`. Her cuts are rendered as-is; don't "improve" them. If qa lists a leftover filler or gap, mention it rather than cutting it.
+3. **If a visuals project exists** (`Videos/<name>/editor files/<name>_broll_project.json`), do this BEFORE step 4 (it needs the old `renderedKeep`): `$PY $POL remap "Videos/<name>/editor files/<name>_cut_project.json" "Videos/<name>/editor files/<name>_broll_project.json"`. It moves caption words, B-roll slots, cards, zooms and the hook from the old clean timeline to the new one (backup in `_agent/tmp/`), drops caption words that were cut, adds restored words, and flags slots/cards whose edges landed on cut material. Set the visuals project's `video` to the new clean file, tell her what moved or was flagged, and offer to re-render the Glorious version.
+4. `$PY $POL deliver ~/vp/<name>_cut <name>`: the next `<name>_clean_vN.mp4`, the old one to `_agent/tmp/superseded/`, and the cut project refreshed (keeps Claude's reasons and first cut; sets `renderedKeep` and status `rendered`). Add a `<name>_transcript_vN.txt` if the words changed.
 5. Reply with a short table of what changed and the new length.
 
 ## Learning from her cut fixes
@@ -124,15 +109,18 @@ When she drops a version she finished herself (e.g. "Edited-by-Maria.mov"), comp
 - Compare durations of long matched passages and cross-correlate audio envelopes over a range of time-scale factors to detect a speed change.
 - Compare quiet time and the count of pauses over 0.15 s to detect pause tightening.
 - Look at a contact sheet for visual changes, and check loudness with ebur128.
-Then report what she changed and ASK which changes should become the standard before baking them into `polish.py` or this skill. Some of her manual steps (like a 1.1x speed-up) are per-video choices, not defaults. When a change is adopted, back up the old script as `_agent/polish_before_<date>.py`, note the change in VERSION.txt and propose an update to this skill.
+Then report what she changed and ASK which changes should become the standard before baking them into `polish.py` or this skill. Some of her manual steps (like a 1.1x speed-up) are per-video choices, not defaults. When a change is adopted, back up the old script to `_agent/tmp/before_<change>_<date>/`, note the change in VERSION.txt and propose an update to this skill.
 
 ## The script (fallback when `_agent/polish.py` is missing)
-Write this verbatim to `~/vidpolish/polish.py` with `mkdir -p ~/vidpolish && cat > ~/vidpolish/polish.py <<'PYEOF'` … `PYEOF`. It still contains the hook/card/zoom code for step-2 or on-request use; it stays dormant unless edits.json asks for it. If `Editors/Cut Editor.html` is missing from her folder, copy `_agent/editor-backups/Cut Editor (backup).html` back.
+Write this verbatim to `_agent/polish.py` and `~/vidpolish/polish.py` (`cat > _agent/polish.py <<'PYEOF'` … `PYEOF`). It still contains the hook/card/zoom code for step-2 or on-request use; it stays dormant unless edits.json asks for it. Its `setup` stage is for the old Linux VM only. After any change to `_agent/polish.py`, copy it to `~/vidpolish/` and replace this copy. If `Editors/Cut Editor.html` is missing from her folder, copy `_agent/editor-backups/Cut Editor (backup).html` back.
 
 ```python
 #!/usr/bin/env python3
-"""Talking-head video polisher. Stages (each fits in one 3-minute shell call):
-  setup | transcribe SRC WD | plan WD | audio WD | chunk WD N | assemble WD OUT | qa WD OUT
+"""Talking-head video polisher. Stages:
+  transcribe SRC WD | plan WD | pauses WD | audio WD | chunk WD N | assemble WD OUT | qa WD OUT   (setup: Linux VM only)
+  Checking: hear WD (re-transcribe the cut audio before rendering) | prof WD A B (raw loudness around a spot)
+  Step 2 helper: words CLEAN OUT.json (caption word timings of a clean video)
+  One command: render WD (plan..qa) | deliver WD NAME (into Videos/NAME/, never overwrites, + cut project)
   Cut Editor round trip: cutproject WD NAME [CLEAN] | fromcut PROJECT WD | remap PROJECT BROLLPROJECT | proxy WD NAME | voice WD
 WD = work dir (outside the user's folder). Edits are decided by Claude in WD/edits.json
 (delete_words items may carry a reason: [a,b,"filler"|"restart"|"ramble"|"trim"]) or come from her Cut Editor ("keep" pieces)."""
@@ -608,19 +596,13 @@ def assemble(wd,out):
     nf=int(subprocess.run(["ffprobe","-v","error","-count_packets","-select_streams","v","-show_entries","stream=nb_read_packets","-of","csv=p=0",out],capture_output=True,text=True).stdout)
     exp=round(outframes(P,M["fps"])[-1]/P.get("speed",1.0))
     print(f"assembled {out}: {nf} frames (expected {exp}) {'OK' if nf==exp else 'MISMATCH'}")
+    return nf==exp
 
 def qa(wd,out):
     P=J(f"{wd}/plan.json"); M=J(f"{wd}/meta.json"); fps=M["fps"]
     sh(["ffmpeg","-v","error","-y","-i",out,"-vn","-ac","1","-ar","16000",f"{wd}/qa.wav"])
-    words,_,_=verbatim_words(f"{wd}/qa.wav"); txt=" ".join(w["w"] for w in words)
-    print("FINAL TRANSCRIPT:",txt)
-    left=[(round(w["s"],1),w["w"]) for w in words if w["w"].lower().strip(",.?!") in ("uh","um","umm","uhm","hmm","mm")]
-    print("fillers left:",left)
-    ws=[w["w"].lower().strip(",.?!") for w in words]
-    print("doubled words:",[(round(words[i]["s"],1),ws[i]) for i in range(1,len(ws)) if ws[i]==ws[i-1]])
-    # dead air the squeeze missed (noisy outdoor audio): >0.45 s mid-sentence or >0.8 s anywhere, in output time
-    print("long gaps:",[(round(words[i-1]["s"],1),words[i-1]["w"],words[i]["w"],round(words[i]["s"]-words[i-1]["s"]-0.35,1)) for i in range(1,len(words))
-        if words[i]["s"]-words[i-1]["s"]-0.35>(0.8 if words[i-1]["w"][-1:] in ".?!" else 0.45)])
+    words,_,_=verbatim_words(f"{wd}/qa.wav")
+    report(wd,words,db10(f"{wd}/qa.wav"),"FINAL TRANSCRIPT")
     off,z=P["off"],P["z"]; ts=[off[k]+1.5 for k in range(1,len(z)) if z[k] and not z[k-1]]
     ts+=[e["t"]+1 for e in P["events"]]+([1.5] if P["hook"] else [])
     ts=sorted(t/P.get("speed",1.0) for t in ts if t<off[-1])[:12]
@@ -628,6 +610,64 @@ def qa(wd,out):
     sel="+".join(f"eq(n\\,{int(t*fps)})" for t in ts)
     sh(["ffmpeg","-v","error","-y","-i",out,"-vf",f"select='{sel}',scale=200:-1,tile={len(ts)}x1","-frames:v","1",os.path.join(os.path.dirname(out),"_qa_frames.jpg")])
     print("contact sheet: _qa_frames.jpg")
+
+# ---------------- checking the cut by ear (added 2026-11-08; were throwaway helpers until then) ----------------
+CONNECTIVES={"and","then","now","but","so","because","or"}
+def out2src(P,t):
+    """Output time (seconds in the cut, after any speed-up) -> raw time, through plan.json."""
+    t*=P.get("speed",1.0)
+    for g,o in zip(P["segs"],P["off"]):
+        if t<o+g["e"]-g["s"]: return round(g["s"]+max(0,t-o),2)
+    return round(P["segs"][-1]["e"],2)
+
+def report(wd,words,db,label):
+    """What a viewer would trip on in a cut, from a re-transcription of it (words in output time, db = its 10 ms loudness).
+    Gaps count real quiet (under the pause level), not word spacing: a stretched word ("reaaally") is sound, not dead air.
+    Listed with raw times (src) so a fix goes straight into edits.json (delete_times) or the Cut Editor."""
+    P=J(f"{wd}/plan.json"); E=J(f"{wd}/edits.json") if os.path.exists(f"{wd}/edits.json") else {}
+    print(f"{label}:"," ".join(w["w"] for w in words))
+    ws=[w["w"].lower().strip(",.?!") for w in words]
+    print("fillers left:",[(round(w["s"],1),w["w"]) for w,x in zip(words,ws) if x in FILLERS])
+    print("doubled words:",[(round(words[i]["s"],1),ws[i]) for i in range(1,len(ws)) if ws[i]==ws[i-1] and words[i-1]["w"][-1:] not in ".?!"])
+    # quiet = within 8 dB of the local background (15th percentile over +-5 s), no fixed cap: the cut is loudness-normalized
+    # and wave or wind noise never gets "quiet" (with pause_level's -34 dB cap my weak IMG_0959 cut showed 2 gaps instead of ~20)
+    import numpy as np
+    n=len(db); pts=np.arange(0,n,50); fl=np.array([np.percentile(db[max(0,i-500):min(n,i+500)],15) for i in pts])
+    sm=np.median(np.lib.stride_tricks.sliding_window_view(np.pad(db,2,mode="edge"),5),axis=1)
+    q=sm<np.interp(np.arange(n),pts,fl)+8; gaps=[]; slow=[]
+    for i in range(1,len(words)):
+        a,b=words[i-1]["s"],words[i]["s"]; quiet=q[int(a*100)+10:int(b*100)].sum()/100
+        end=words[i-1]["w"][-1:] in ".?!"
+        if quiet>(0.7 if end else 0.35):
+            s0,s1=out2src(P,a),out2src(P,b)
+            beat=any(k0<s1 and k1>s0 for k0,k1 in E.get("keep_pauses",[]))
+            gaps.append(f"{a:.1f} {words[i-1]['w']} | {words[i]['w']}  quiet {quiet:.2f}s  src {s0}-{s1}"+(" (kept beat)" if beat else ""))
+        elif b-a>0.9 and ws[i-1] in CONNECTIVES: slow.append(f"{a:.1f} {words[i-1]['w']}… ({b-a:.1f}s)")
+    print("long gaps:"+("".join("\n  "+g for g in gaps) if gaps else " none"))
+    if slow: print("drawn-out connectives (cut if the sentence works without):",", ".join(slow))
+
+def hear(wd):
+    """Re-transcribe the cut audio (WD/audio.m4a, right after `audio`, before the video render) and report it. Cheap: fix here, then render."""
+    sh(["ffmpeg","-v","error","-y","-i",f"{wd}/audio.m4a","-ac","1","-ar","16000",f"{wd}/hear.wav"])
+    report(wd,verbatim_words(f"{wd}/hear.wav")[0],db10(f"{wd}/hear.wav"),"HEARD")
+
+def words(video,out):
+    """Caption word timings of a CLEAN video for step 2: OUT = [{w,s,e}] in the clean video's time, printed as idx:word@start."""
+    wav=out[:-5]+"_16k.wav"; sh(["ffmpeg","-v","error","-y","-i",video,"-vn","-ac","1","-ar","16000",wav])
+    W=[{"w":x["w"],"s":round(x["s"],3),"e":round(x["e"],3)} for x in verbatim_words(wav)[0]]; W_(out,W); os.remove(wav)
+    print(" ".join(f"{i}:{x['w']}@{x['s']:.2f}" for i,x in enumerate(W)))
+
+def prof(wd,a,b,step=0.02):
+    """Loudness of the RAW take around a spot (a..b raw seconds): words, kept pieces, dB every 20 ms, and the quietest points.
+    Use it to put a delete_times edge at the quiet point right before a kept word (no slivers)."""
+    import numpy as np
+    db=db10(f"{wd}/a16.wav"); W=J(f"{wd}/words.json")["words"]
+    if os.path.exists(f"{wd}/plan.json"):
+        print("kept:",[(round(g["s"],2),round(g["e"],2)) for g in J(f"{wd}/plan.json")["segs"] if g["e"]>a and g["s"]<b])
+    print("words:"," ".join(f"{i}:{w['w']}@{w['s']:.2f}" for i,w in enumerate(W) if w["e"]>a and w["s"]<b))
+    n=max(1,round(step*100)); v=[(t/100,db[t:t+n].max()) for t in range(int(a*100),int(b*100),n)]
+    for k in range(0,len(v),10): print("  "+" ".join(f"{t:.2f}:{x:.0f}" for t,x in v[k:k+10]))
+    print("quietest:",", ".join(f"{t:.2f} ({x:.0f} dB)" for t,x in sorted(v,key=lambda p:p[1])[:3]))
 
 # ---------------- Cut Editor round trip ----------------
 VIDDIR=os.path.dirname(DEFAULT_TOOLS)   # her "AI agent video edit" folder
@@ -739,6 +779,29 @@ def remap(projpath,brollpath):
     print(f"visuals moved to the new cut ({oo[-1]:.2f}s -> {on[-1]:.2f}s). caption words removed: {lost or 'none'}; added: {added or 'none'}")
     for x in flags: print(" !",x)
 
+# ---------------- one-command render and delivery (added 2026-11-08) ----------------
+def render(wd):
+    """plan, audio, every chunk, assemble WD/final.mp4, qa. Stops on a frame-count mismatch."""
+    plan(wd); audio(wd)
+    for n in range(len(J(f"{wd}/plan.json")["chunks"])): chunk(wd,n)
+    if not assemble(wd,f"{wd}/final.mp4"): sys.exit("frame count mismatch: don't deliver")
+    qa(wd,f"{wd}/final.mp4")
+
+def deliver(wd,name):
+    """WD/final.mp4 -> Videos/NAME/NAME_clean.mp4 (or the next _vN; never overwrites), cut list next to it, then the cut project.
+    An older clean video moves to _agent/tmp/superseded/ (only the newest superseded copy is kept, her rule of 2026-11-04)."""
+    import shutil, glob
+    D=f"{VIDDIR}/Videos/{name}"; os.makedirs(D,exist_ok=True)
+    vs=sorted(glob.glob(f"{D}/{name}_clean.mp4")+glob.glob(f"{D}/{name}_clean_v*.mp4"),key=lambda f:int((re.findall(r"_v(\d+)\.mp4$",f) or [1])[0]))
+    v=int((re.findall(r"_v(\d+)\.mp4$",vs[-1]) or [1])[0])+1 if vs else 1; sfx=f"_v{v}" if v>1 else ""
+    out=f"{D}/{name}_clean{sfx}.mp4"; shutil.copy(f"{wd}/final.mp4",out); shutil.copy(f"{wd}/cutlist.txt",f"{D}/{name}_cutlist{sfx}.txt")
+    print("delivered",os.path.relpath(out,VIDDIR))
+    if vs:
+        T=f"{DEFAULT_TOOLS}/tmp/superseded"; os.makedirs(T,exist_ok=True)
+        for f in glob.glob(f"{T}/{name}_clean*.mp4"): os.remove(f)
+        shutil.move(vs[-1],T); print("moved the older version to",os.path.relpath(f"{T}/{os.path.basename(vs[-1])}",VIDDIR))
+    cutproject(wd,name,os.path.relpath(out,VIDDIR))
+
 if __name__=="__main__":
     a=sys.argv[1:]; cmd=a[0]
     if cmd=="setup": setup(a[1] if len(a)>1 else None)
@@ -754,8 +817,9 @@ if __name__=="__main__":
     elif cmd=="cutproject": cutproject(a[1],a[2],a[3] if len(a)>3 else None)
     elif cmd=="fromcut": fromcut(a[1],a[2])
     elif cmd=="remap": remap(a[1],a[2])
+    elif cmd=="hear": hear(a[1])
+    elif cmd=="words": words(a[1],a[2])
+    elif cmd=="prof": prof(a[1],float(a[2]),float(a[3]))
+    elif cmd=="render": render(a[1])
+    elif cmd=="deliver": deliver(a[1],a[2])
 ```
-
-Tested 2026-10-20/21 on the "breadcrumbing" video: 2:43 raw → 1:41.7 clean (3,050 frames, OK). The Cut Editor round trip was tested on 2026-10-21: an editor edit with 13 ms / 35 ms edge moves rendered to exactly the expected 3,049 frames, frame-identical to the clean video elsewhere, audio within half a frame.
-
-macOS port (2026-10-25): the script above is the Mac version (ffmpeg 9 via Homebrew `ffmpeg-full`). It uses `-/filter_complex FILE` instead of the removed `-filter_complex_script`, so it needs ffmpeg 7 or newer. The final render (`chunk`) encodes with `h264_videotoolbox -b:v 16M` (Apple Silicon only): 2.6x faster than libx264 CRF 18 for 0.65 VMAF points; to go back, swap in `"libx264","-preset","medium","-crf","18"`. Smoke-tested on a 30 s piece of 1025-1: 718/718 frames OK, -14.1 LUFS.

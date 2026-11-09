@@ -402,7 +402,7 @@ Mic Drop = `roboto-b`, size 0.082, 4 words, white, outline 0.0025, shadow 0.003 
 ### 6b. Recommended stack
 | Layer | Recommendation | Status |
 |---|---|---|
-| Render engine | ffmpeg (Homebrew on native macOS) + Python | ✅ proven (in Linux VM); 💡 native macOS untested |
+| Render engine | ffmpeg (Homebrew `ffmpeg-full` on native macOS) + Python | ✅ proven (Linux VM, then native macOS since the 2026-10-25 port) |
 | Check native ffmpeg has the filters | `ffmpeg -hide_banner -filters \| grep -E " (ass\|subtitles\|zscale\|tonemap\|arnndn\|loudnorm\|xfade) "` | 💡 must verify; `zscale` needs libzimg |
 | Transcription | Parakeet TDT 0.6B v2 via sherpa-onnx, phrase-level | ✅ (quiet speech); 💡 untested over music |
 | Speech/music separation | **Demucs (htdemucs)** to pull voice out of concert noise; alternatively CapCut Pro's voice enhance/noise reduction | 💡 untested |
@@ -413,7 +413,7 @@ Mic Drop = `roboto-b`, size 0.082, 4 words, white, outline 0.0025, shadow 0.003 
 | Colour | One consistent grade for all clips (`eq`, `colorbalance`, or a `.cube` LUT via `lut3d`) after tone-mapping | 💡 untested |
 | Captions/text | Our fonts and presets: **Elegant** (DM Serif), Glorious serif/script, or **Mic Drop** for speech | ✅ |
 | Final polish | CapCut Pro, optional manual pass | ✅ Maria uses it; automation with CapCut 🔍 never tried |
-| Hardware encoding | `h264_videotoolbox` is faster on Apple Silicon, but we only validated `libx264 -crf 18`. Keep libx264 for finals. | 💡 untested |
+| Hardware encoding | Tested 2026-10-25 with VMAF (her rule: switch only if within 1 point and at least 2x faster). polish.py finals use `h264_videotoolbox -b:v 16M` (VMAF 98.07 vs 98.72, 2.6x faster); glorious.py stays on `libx264 -crf 18` (its compositing caps the gain at 1.8x). | ✅ decided |
 
 **Native macOS setup (💡 untested):**
 ```bash

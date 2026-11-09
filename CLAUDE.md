@@ -31,14 +31,7 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 | "update the B-roll library" | `update-broll-library` |
 | "make a thumbnail for <name>" (with or without a headline) | `glorious-thumbnail` (step 3: `_agent/thumbnail.py`, 3 options in `Videos/<name>/`) |
 
-**The skills were written for a cloud sandbox that reached this Mac through a bridge. Translate as you go:**
-- `device_bash` → run the command directly in your own shell.
-- `$HOME/mnt/AI agent video edit` → `~/Desktop/AI agent video edit`. `$HOME/mnt/b-roll collection` → `~/Desktop/b-roll collection`.
-- "180-second cap / run 2–3 chunks per call" → that limit no longer applies. Keep the chunk → assemble design (it is proven and resumable), but loop all chunks in one command.
-- "stage the image and view it" → just open the JPG with the Read tool.
-- "ask her to connect / add the folder in the desktop app" → not needed; ignore it.
-- `python3` → `~/vidpolish/.venv/bin/python`.
-- `polish.py setup` (the fast path installs from `_agent/wheels/`) → **don't use it on macOS.** Those wheels are Linux aarch64 and won't install here. Use the first-run setup below.
+The skills are written for this Mac (rewritten 2026-11-08; the old cloud-bridge wording and its translation table are gone): real `~/Desktop/...` paths, `~/vidpolish/.venv/bin/python`, no time limits, images opened with the Read tool. Never run `polish.py setup` here (its wheels are Linux-only).
 
 ## macOS port (done 2026-10-25)
 Setup is done and the smoke test passed: polish.py through the full chain, and glorious.py with captions, 2 B-roll slots, a zoom and the RVM hook. The steps below are kept for reinstalling on a new Mac. What differs from the old Ubuntu VM (ffmpeg 4.4.2, Python 3.10):
@@ -50,7 +43,7 @@ Setup is done and the smoke test passed: polish.py through the full chain, and g
   - polish.py paths: `DEFAULT_TOOLS` → `~/Desktop/AI agent video edit/_agent`, and the legacy-card font → `_agent/fonts/Poppins-ExtraBold.ttf`.
   - `verbatim_words` now guards against a negative start when no silence is found (qa returned an empty transcript on a tightly cut clip).
 - **Fallback copy:** the script embedded in the polish skill is the Mac version too. After changing `_agent/polish.py`, copy it to `~/vidpolish/` and re-sync the embedded copy.
-- **Not yet exercised on macOS:** the Cut Editor round trip (cutproject/fromcut/remap), `add_broll.py` and `build_clips.py`. Check them closely the first time they run.
+- **Not yet confirmed on macOS:** `remap`, `add_broll.py` and `build_clips.py` (cutproject and fromcut ran fine on 2026-11-08). Check them closely the first time they run.
 - **Watch for:** in fast speech with no pause between words, the auto-cut edge extension can let a deleted word back in. Read the KEPT TEXT after `plan` and fix any leftovers with `delete_times` at the quietest point.
 
 ## First-run setup on a new Mac (reference)

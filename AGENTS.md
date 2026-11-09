@@ -8,7 +8,8 @@ This folder is shared by Claude Code and Codex. **`CLAUDE.md` is the single sour
   - `glorious-visuals`: step 2 visuals ("add the Glorious visuals", "render my edits for <name>")
   - `add-broll-to-video`: B-roll-only pass
   - `update-broll-library`: catalog new B-roll in `~/Desktop/b-roll collection`
-- Apply the translation table in CLAUDE.md: the skills were written for a cloud bridge (`device_bash`, `$HOME/mnt/...` paths, a 180-second limit, "staging" images). On this Mac, run commands directly, use the real `~/Desktop/...` paths, and open images yourself to check renders.
+  - `glorious-thumbnail`: step 3 thumbnails ("make a thumbnail for <name>")
+- The skills are written for this Mac: run their commands as written (real `~/Desktop/...` paths, `~/vidpolish/.venv/bin/python`) and open the images they mention yourself to check renders.
 - Mentions of Claude's tools (the Read tool, slash commands, `.claude/settings.json`) map to your own equivalents.
 
 ## Environment (already set up; don't reinstall)
