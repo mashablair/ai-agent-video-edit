@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Talking-head video polisher. Stages (each fits in one 3-minute shell call):
-  setup | transcribe SRC WD | plan WD | audio WD | chunk WD N | assemble WD OUT | qa WD OUT
+"""Talking-head video polisher. Stages:
+  transcribe SRC WD | plan WD | pauses WD | audio WD | chunk WD N | assemble WD OUT | qa WD OUT   (setup: Linux VM only)
+  Checking: hear WD (re-transcribe the cut audio before rendering) | prof WD A B (raw loudness around a spot)
+  Step 2 helper: words CLEAN OUT.json (caption word timings of a clean video)
+  One command: render WD (plan..qa) | deliver WD NAME (into Videos/NAME/, never overwrites, + cut project)
   Cut Editor round trip: cutproject WD NAME [CLEAN] | fromcut PROJECT WD | remap PROJECT BROLLPROJECT | proxy WD NAME | voice WD
 WD = work dir (outside the user's folder). Edits are decided by Claude in WD/edits.json
 (delete_words items may carry a reason: [a,b,"filler"|"restart"|"ramble"|"trim"]) or come from her Cut Editor ("keep" pieces)."""
@@ -476,19 +479,13 @@ def assemble(wd,out):
     nf=int(subprocess.run(["ffprobe","-v","error","-count_packets","-select_streams","v","-show_entries","stream=nb_read_packets","-of","csv=p=0",out],capture_output=True,text=True).stdout)
     exp=round(outframes(P,M["fps"])[-1]/P.get("speed",1.0))
     print(f"assembled {out}: {nf} frames (expected {exp}) {'OK' if nf==exp else 'MISMATCH'}")
+    return nf==exp
 
 def qa(wd,out):
     P=J(f"{wd}/plan.json"); M=J(f"{wd}/meta.json"); fps=M["fps"]
     sh(["ffmpeg","-v","error","-y","-i",out,"-vn","-ac","1","-ar","16000",f"{wd}/qa.wav"])
-    words,_,_=verbatim_words(f"{wd}/qa.wav"); txt=" ".join(w["w"] for w in words)
-    print("FINAL TRANSCRIPT:",txt)
-    left=[(round(w["s"],1),w["w"]) for w in words if w["w"].lower().strip(",.?!") in ("uh","um","umm","uhm","hmm","mm")]
-    print("fillers left:",left)
-    ws=[w["w"].lower().strip(",.?!") for w in words]
-    print("doubled words:",[(round(words[i]["s"],1),ws[i]) for i in range(1,len(ws)) if ws[i]==ws[i-1]])
-    # dead air the squeeze missed (noisy outdoor audio): >0.45 s mid-sentence or >0.8 s anywhere, in output time
-    print("long gaps:",[(round(words[i-1]["s"],1),words[i-1]["w"],words[i]["w"],round(words[i]["s"]-words[i-1]["s"]-0.35,1)) for i in range(1,len(words))
-        if words[i]["s"]-words[i-1]["s"]-0.35>(0.8 if words[i-1]["w"][-1:] in ".?!" else 0.45)])
+    words,_,_=verbatim_words(f"{wd}/qa.wav")
+    report(wd,words,db10(f"{wd}/qa.wav"),"FINAL TRANSCRIPT")
     off,z=P["off"],P["z"]; ts=[off[k]+1.5 for k in range(1,len(z)) if z[k] and not z[k-1]]
     ts+=[e["t"]+1 for e in P["events"]]+([1.5] if P["hook"] else [])
     ts=sorted(t/P.get("speed",1.0) for t in ts if t<off[-1])[:12]
@@ -496,6 +493,64 @@ def qa(wd,out):
     sel="+".join(f"eq(n\\,{int(t*fps)})" for t in ts)
     sh(["ffmpeg","-v","error","-y","-i",out,"-vf",f"select='{sel}',scale=200:-1,tile={len(ts)}x1","-frames:v","1",os.path.join(os.path.dirname(out),"_qa_frames.jpg")])
     print("contact sheet: _qa_frames.jpg")
+
+# ---------------- checking the cut by ear (added 2026-11-08; were throwaway helpers until then) ----------------
+CONNECTIVES={"and","then","now","but","so","because","or"}
+def out2src(P,t):
+    """Output time (seconds in the cut, after any speed-up) -> raw time, through plan.json."""
+    t*=P.get("speed",1.0)
+    for g,o in zip(P["segs"],P["off"]):
+        if t<o+g["e"]-g["s"]: return round(g["s"]+max(0,t-o),2)
+    return round(P["segs"][-1]["e"],2)
+
+def report(wd,words,db,label):
+    """What a viewer would trip on in a cut, from a re-transcription of it (words in output time, db = its 10 ms loudness).
+    Gaps count real quiet (under the pause level), not word spacing: a stretched word ("reaaally") is sound, not dead air.
+    Listed with raw times (src) so a fix goes straight into edits.json (delete_times) or the Cut Editor."""
+    P=J(f"{wd}/plan.json"); E=J(f"{wd}/edits.json") if os.path.exists(f"{wd}/edits.json") else {}
+    print(f"{label}:"," ".join(w["w"] for w in words))
+    ws=[w["w"].lower().strip(",.?!") for w in words]
+    print("fillers left:",[(round(w["s"],1),w["w"]) for w,x in zip(words,ws) if x in FILLERS])
+    print("doubled words:",[(round(words[i]["s"],1),ws[i]) for i in range(1,len(ws)) if ws[i]==ws[i-1] and words[i-1]["w"][-1:] not in ".?!"])
+    # quiet = within 8 dB of the local background (15th percentile over +-5 s), no fixed cap: the cut is loudness-normalized
+    # and wave or wind noise never gets "quiet" (with pause_level's -34 dB cap my weak IMG_0959 cut showed 2 gaps instead of ~20)
+    import numpy as np
+    n=len(db); pts=np.arange(0,n,50); fl=np.array([np.percentile(db[max(0,i-500):min(n,i+500)],15) for i in pts])
+    sm=np.median(np.lib.stride_tricks.sliding_window_view(np.pad(db,2,mode="edge"),5),axis=1)
+    q=sm<np.interp(np.arange(n),pts,fl)+8; gaps=[]; slow=[]
+    for i in range(1,len(words)):
+        a,b=words[i-1]["s"],words[i]["s"]; quiet=q[int(a*100)+10:int(b*100)].sum()/100
+        end=words[i-1]["w"][-1:] in ".?!"
+        if quiet>(0.7 if end else 0.35):
+            s0,s1=out2src(P,a),out2src(P,b)
+            beat=any(k0<s1 and k1>s0 for k0,k1 in E.get("keep_pauses",[]))
+            gaps.append(f"{a:.1f} {words[i-1]['w']} | {words[i]['w']}  quiet {quiet:.2f}s  src {s0}-{s1}"+(" (kept beat)" if beat else ""))
+        elif b-a>0.9 and ws[i-1] in CONNECTIVES: slow.append(f"{a:.1f} {words[i-1]['w']}… ({b-a:.1f}s)")
+    print("long gaps:"+("".join("\n  "+g for g in gaps) if gaps else " none"))
+    if slow: print("drawn-out connectives (cut if the sentence works without):",", ".join(slow))
+
+def hear(wd):
+    """Re-transcribe the cut audio (WD/audio.m4a, right after `audio`, before the video render) and report it. Cheap: fix here, then render."""
+    sh(["ffmpeg","-v","error","-y","-i",f"{wd}/audio.m4a","-ac","1","-ar","16000",f"{wd}/hear.wav"])
+    report(wd,verbatim_words(f"{wd}/hear.wav")[0],db10(f"{wd}/hear.wav"),"HEARD")
+
+def words(video,out):
+    """Caption word timings of a CLEAN video for step 2: OUT = [{w,s,e}] in the clean video's time, printed as idx:word@start."""
+    wav=out[:-5]+"_16k.wav"; sh(["ffmpeg","-v","error","-y","-i",video,"-vn","-ac","1","-ar","16000",wav])
+    W=[{"w":x["w"],"s":round(x["s"],3),"e":round(x["e"],3)} for x in verbatim_words(wav)[0]]; W_(out,W); os.remove(wav)
+    print(" ".join(f"{i}:{x['w']}@{x['s']:.2f}" for i,x in enumerate(W)))
+
+def prof(wd,a,b,step=0.02):
+    """Loudness of the RAW take around a spot (a..b raw seconds): words, kept pieces, dB every 20 ms, and the quietest points.
+    Use it to put a delete_times edge at the quiet point right before a kept word (no slivers)."""
+    import numpy as np
+    db=db10(f"{wd}/a16.wav"); W=J(f"{wd}/words.json")["words"]
+    if os.path.exists(f"{wd}/plan.json"):
+        print("kept:",[(round(g["s"],2),round(g["e"],2)) for g in J(f"{wd}/plan.json")["segs"] if g["e"]>a and g["s"]<b])
+    print("words:"," ".join(f"{i}:{w['w']}@{w['s']:.2f}" for i,w in enumerate(W) if w["e"]>a and w["s"]<b))
+    n=max(1,round(step*100)); v=[(t/100,db[t:t+n].max()) for t in range(int(a*100),int(b*100),n)]
+    for k in range(0,len(v),10): print("  "+" ".join(f"{t:.2f}:{x:.0f}" for t,x in v[k:k+10]))
+    print("quietest:",", ".join(f"{t:.2f} ({x:.0f} dB)" for t,x in sorted(v,key=lambda p:p[1])[:3]))
 
 # ---------------- Cut Editor round trip ----------------
 VIDDIR=os.path.dirname(DEFAULT_TOOLS)   # her "AI agent video edit" folder
@@ -607,6 +662,29 @@ def remap(projpath,brollpath):
     print(f"visuals moved to the new cut ({oo[-1]:.2f}s -> {on[-1]:.2f}s). caption words removed: {lost or 'none'}; added: {added or 'none'}")
     for x in flags: print(" !",x)
 
+# ---------------- one-command render and delivery (added 2026-11-08) ----------------
+def render(wd):
+    """plan, audio, every chunk, assemble WD/final.mp4, qa. Stops on a frame-count mismatch."""
+    plan(wd); audio(wd)
+    for n in range(len(J(f"{wd}/plan.json")["chunks"])): chunk(wd,n)
+    if not assemble(wd,f"{wd}/final.mp4"): sys.exit("frame count mismatch: don't deliver")
+    qa(wd,f"{wd}/final.mp4")
+
+def deliver(wd,name):
+    """WD/final.mp4 -> Videos/NAME/NAME_clean.mp4 (or the next _vN; never overwrites), cut list next to it, then the cut project.
+    An older clean video moves to _agent/tmp/superseded/ (only the newest superseded copy is kept, her rule of 2026-11-04)."""
+    import shutil, glob
+    D=f"{VIDDIR}/Videos/{name}"; os.makedirs(D,exist_ok=True)
+    vs=sorted(glob.glob(f"{D}/{name}_clean.mp4")+glob.glob(f"{D}/{name}_clean_v*.mp4"),key=lambda f:int((re.findall(r"_v(\d+)\.mp4$",f) or [1])[0]))
+    v=int((re.findall(r"_v(\d+)\.mp4$",vs[-1]) or [1])[0])+1 if vs else 1; sfx=f"_v{v}" if v>1 else ""
+    out=f"{D}/{name}_clean{sfx}.mp4"; shutil.copy(f"{wd}/final.mp4",out); shutil.copy(f"{wd}/cutlist.txt",f"{D}/{name}_cutlist{sfx}.txt")
+    print("delivered",os.path.relpath(out,VIDDIR))
+    if vs:
+        T=f"{DEFAULT_TOOLS}/tmp/superseded"; os.makedirs(T,exist_ok=True)
+        for f in glob.glob(f"{T}/{name}_clean*.mp4"): os.remove(f)
+        shutil.move(vs[-1],T); print("moved the older version to",os.path.relpath(f"{T}/{os.path.basename(vs[-1])}",VIDDIR))
+    cutproject(wd,name,os.path.relpath(out,VIDDIR))
+
 if __name__=="__main__":
     a=sys.argv[1:]; cmd=a[0]
     if cmd=="setup": setup(a[1] if len(a)>1 else None)
@@ -622,3 +700,8 @@ if __name__=="__main__":
     elif cmd=="cutproject": cutproject(a[1],a[2],a[3] if len(a)>3 else None)
     elif cmd=="fromcut": fromcut(a[1],a[2])
     elif cmd=="remap": remap(a[1],a[2])
+    elif cmd=="hear": hear(a[1])
+    elif cmd=="words": words(a[1],a[2])
+    elif cmd=="prof": prof(a[1],float(a[2]),float(a[3]))
+    elif cmd=="render": render(a[1])
+    elif cmd=="deliver": deliver(a[1],a[2])

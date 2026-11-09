@@ -584,6 +584,18 @@ def assemble(pp,wd,out):
     nf=subprocess.run(["ffprobe","-v","error","-count_packets","-select_streams","v","-show_entries","stream=nb_read_packets","-of","csv=p=0",out],capture_output=True,text=True).stdout.strip()
     print("assembled",out,"frames",nf,"expected",round(S["dur"]*S["fps"]/SP),f"(speed {SP}x)")
 
+def sheet(pp,video,out):
+    """Contact sheet for checking a render by eye: the hook, the middle of every B-roll slot, every card, and her face across the video (time on each frame)."""
+    p=json.load(open(pp)); d=p.get("duration") or float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",video],capture_output=True,text=True).stdout)
+    sp=float(p.get("speed",1.0) or 1.0)
+    ts={0.6}|{round((s["a"]+s["b"])/2,2) for s in p.get("slots",[])}|{round(t["a"]+1.2,2) for t in p.get("tiles",[])}|{round(d*f,2) for f in (0.2,0.45,0.7,0.95)}
+    ts=sorted(t for t in ts if t<d)[:40]; tmp=out+"_f"; os.makedirs(tmp,exist_ok=True)
+    for i,t in enumerate(ts):
+        subprocess.run(["ffmpeg","-v","error","-y","-ss",f"{t/sp:.2f}","-i",video,"-frames:v","1","-vf",f"scale=216:-1,drawtext=text='{t}':x=5:y=5:fontsize=20:fontcolor=yellow",f"{tmp}/f_{i:02d}.jpg"])
+    subprocess.run(["ffmpeg","-v","error","-y","-pattern_type","glob","-i",f"{tmp}/f_*.jpg","-vf",f"tile=10x{(len(ts)+9)//10}","-frames:v","1",out])
+    for f in os.listdir(tmp): os.remove(f"{tmp}/{f}")
+    os.rmdir(tmp); print("contact sheet:",out,f"({len(ts)} frames)")
+
 if __name__=="__main__":
     cmd,pp=sys.argv[1],sys.argv[2]
     if cmd=="numbers": numbers(pp,"--dry" in sys.argv)
@@ -601,3 +613,4 @@ if __name__=="__main__":
             if "ax" not in z: x,y=face_at(S,z["a"]+0.05); z["ax"]=round(x/S["W"],4); z["ay"]=round(y/S["H"],4)
         json.dump(p,open(pp,"w"),indent=1); print("anchors set for",len(p.get("zooms",[])),"zooms")
     elif cmd=="assemble": assemble(pp,sys.argv[3],sys.argv[4])
+    elif cmd=="sheet": sheet(pp,sys.argv[3],sys.argv[4])

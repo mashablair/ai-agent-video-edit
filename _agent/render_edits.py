@@ -81,12 +81,7 @@ def main(name,dry=False):
         else: L.append(f"- {datetime.date.today()}, {stem} (Glorious): {clips}")
         open(CAT,"w").write("\n".join(L)+"\n")
     # contact sheet for checking by eye
-    ts=sorted({round((s["a"]+s["b"])/2,2) for s in B["slots"]}|{0.6}|{round(B["duration"]*f,2) for f in (0.2,0.45,0.7,0.95)})
-    for i,t in enumerate(ts):
-        subprocess.run(["ffmpeg","-v","error","-y","-ss",str(t),"-i",new,"-frames:v","1","-vf",f"scale=216:-1,drawtext=text='{t}':x=5:y=5:fontsize=20:fontcolor=yellow",f"{wd}/f_{i:02d}.jpg"])
-    subprocess.run(["ffmpeg","-v","error","-y","-pattern_type","glob","-i",f"{wd}/f_*.jpg","-vf","tile=10x3","-frames:v","1",f"{wd}/sheet.jpg"])
-    for f in glob.glob(f"{wd}/f_*.jpg"): os.remove(f)
-    print("contact sheet:",f"{wd}/sheet.jpg")
+    run(GLO,"sheet",BP,new,f"{wd}/sheet.jpg")
 
 if __name__=="__main__":
     a=[x for x in sys.argv[1:] if not x.startswith("--")]
