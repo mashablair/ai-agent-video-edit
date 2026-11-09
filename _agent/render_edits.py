@@ -8,7 +8,7 @@
 2. Render the Glorious video (glorious.py plan/chunk/assemble) and deliver Videos/NAME/NAME_glorious_vN.mp4.
 3. Superseded versions go to _agent/tmp/superseded/, the usage-log line in CATALOG.md is refreshed, and a contact
    sheet (one frame per B-roll slot plus a few on her face) is written to the work dir for checking.
-Work dirs: ~/vp/NAME_cut_<time> and ~/vp/NAME_g_<time>."""
+Work dirs: ~/vp/NAME_cut and ~/vp/NAME_g, one per video, emptied at the start of each render (no stale chunks or hook masks)."""
 import sys, os, json, re, glob, shutil, subprocess, time, datetime
 HOME=os.path.expanduser("~"); AG=os.path.dirname(os.path.abspath(__file__)); VID=os.path.dirname(AG)
 PY=f"{HOME}/vidpolish/.venv/bin/python"; POL=f"{AG}/polish.py"; GLO=f"{AG}/glorious.py"
@@ -31,17 +31,19 @@ def retire(path):
         os.makedirs(f"{AG}/tmp/superseded",exist_ok=True); dst=f"{AG}/tmp/superseded/{os.path.basename(path)}"
         if os.path.exists(dst): dst=dst[:-4]+f"_{int(time.time())}.mp4"
         shutil.move(path,dst); print("  moved the old version to",os.path.relpath(dst,VID))
+def fresh(wd):   # the same folder every time (was timestamped and piled up in ~/vp), emptied so nothing stale is reused
+    shutil.rmtree(wd,ignore_errors=True); os.makedirs(wd); return wd
 
 def main(name,dry=False):
     D=f"{VID}/Videos/{name}"; ED=f"{D}/editor files"; CP=f"{ED}/{name}_cut_project.json"; BP=f"{ED}/{name}_broll_project.json"
-    C=J(CP); B=J(BP); stamp=time.strftime("%m%d_%H%M%S")
+    C=J(CP); B=J(BP)
     cut_changed=not same(C["keep"],C.get("renderedKeep"))
     print(f"{name}: cuts {'CHANGED' if cut_changed else 'unchanged'} ({sum(b-a for a,b in C['keep']):.2f}s vs rendered {sum(b-a for a,b in C.get('renderedKeep') or []):.2f}s); visuals status {B.get('status')}")
     if dry: return
     if cut_changed:
         raw=os.path.join(VID,C["src"])
         if not os.path.isfile(raw): sys.exit(f"The raw video {C['src']} is gone, so the cut changes can't be rendered. Ask Maria to put it back.")
-        wd=f"{HOME}/vp/{name}_cut_{stamp}"
+        wd=fresh(f"{HOME}/vp/{name}_cut")
         print("== cuts ==")
         run(POL,"fromcut",CP,wd); run(POL,"plan",wd,quiet=True); run(POL,"audio",wd,quiet=True)
         n=len(J(f"{wd}/plan.json")["chunks"])
@@ -59,7 +61,7 @@ def main(name,dry=False):
         json.dump(B,open(BP,"w"),indent=1)
         if old!=new: retire(old)
     print("== visuals ==")
-    wd=f"{HOME}/vp/{name}_g_{stamp}"; os.makedirs(wd,exist_ok=True)
+    wd=fresh(f"{HOME}/vp/{name}_g")
     pl=run(GLO,"plan",BP,quiet=True); n=int(re.findall(r"chunks (\d+)",pl)[-1])
     for k in range(n): run(GLO,"chunk",BP,wd,str(k),quiet=True)
     out=run(GLO,"assemble",BP,wd,f"{wd}/final.mp4")
