@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Put a thumbnail in front of a finished video as its first frame (for FB, YouTube and TikTok, where the cover must be picked from the video).
-usage: cover.py VIDEO IMAGE [--frames N]      (N = how many frames the thumbnail holds; default 1 = 1/30 s, invisible to viewers)
+usage: cover.py VIDEO IMAGE [--frames N]      (N = how many frames the thumbnail holds; default 3 = 0.1 s: Instagram's web cover picker misses a 1-frame cover)
   Writes VIDEO_cover.mp4 next to it (then _cover_v2, ...; never overwrites). No re-render: the thumbnail becomes a tiny
   segment encoded with glorious.py's exact settings and is joined in front by stream copy, the way glorious.py joins its
   chunks. Audio is delayed by the same N frames. Checks: frame count, a clean decode, and every original frame identical."""
@@ -16,7 +16,7 @@ def outname(v):
     while os.path.exists(p): p=f"{b}_v{k}.mp4"; k+=1
     return p
 
-def cover(video,image,nf=1):
+def cover(video,image,nf=3):
     vs,au,fps=probe(video); w,h=vs["width"],vs["height"]; out=outname(video); td=tempfile.mkdtemp(prefix="cover_")
     if vs["codec_name"]!="h264": sys.exit("expects an H.264 video (our renders are)")
     # 1. the thumbnail as an N-frame segment, encoded exactly like glorious.py's chunks
@@ -45,7 +45,7 @@ def cover(video,image,nf=1):
     return out
 
 if __name__=="__main__":
-    a=[x for x in sys.argv[1:] if not x.startswith("--")]; nf=1
+    a=[x for x in sys.argv[1:] if not x.startswith("--")]; nf=3
     for x in sys.argv[1:]:
         if x.startswith("--frames"): nf=int(x.split("=")[1]) if "=" in x else int(sys.argv[sys.argv.index(x)+1])
     if "--frames" in sys.argv: a=[x for x in a if x!=str(nf)]
