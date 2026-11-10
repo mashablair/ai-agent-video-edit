@@ -5,7 +5,7 @@ repo). Trims silence (-40 dB) and writes 48 kHz stereo WAVs to mixkit/<name>.wav
 Run: ~/vidpolish/.venv/bin/python _agent/sfx/fetch_mixkit.py"""
 import json, os, subprocess, tempfile, urllib.request, numpy as np
 HERE=os.path.dirname(os.path.abspath(__file__)); M=json.load(open(os.path.join(HERE,"sfx.json"))); os.makedirs(os.path.join(HERE,"mixkit"),exist_ok=True)
-for name,m in M.items():
+for name,m in [(k,v) for k,v in M.items() if not k.startswith("_")]:
     with tempfile.TemporaryDirectory() as td:
         raw=os.path.join(td,"raw.wav"); open(raw,"wb").write(urllib.request.urlopen(urllib.request.Request(m["url"],headers={"User-Agent":"Mozilla/5.0"})).read())
         x=np.frombuffer(subprocess.run(["ffmpeg","-v","error","-i",raw,"-ac","1","-ar","48000","-f","f32le","-"],capture_output=True,check=True).stdout,np.float32)
