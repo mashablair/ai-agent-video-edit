@@ -2,7 +2,7 @@
 """Sound effects for the Glorious videos, synthesized here (no downloads, no licences to track). 48 kHz mono WAVs in _agent/sfx/.
 Run: ~/vidpolish/.venv/bin/python _agent/sfx_make.py"""
 import numpy as np, soundfile as sf, os
-SR=48000; OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),"sfx"); rng=np.random.default_rng(7)
+SR=48000; OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),"sfx","synth"); rng=np.random.default_rng(7)
 def t(d): return np.arange(int(d*SR))/SR
 def norm(x,peak=0.8): return x/np.max(np.abs(x))*peak
 def sweep_noise(d,f0,f1,bw=0.6,env=None):

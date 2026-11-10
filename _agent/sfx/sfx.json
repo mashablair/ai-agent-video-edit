@@ -1,0 +1,59 @@
+{
+ "_about": "Sound effects for the Glorious videos (2026-11-10). Mixkit Sound Effects Free License (https://mixkit.co/license/): commercial and social media use, no attribution; don't redistribute the files, so mixkit/*.wav stay out of the public repo (fetch_mixkit.py re-downloads them). hit = seconds from the file start to its loudest moment (line that up with the event); gain_db = level match to the volume Maria approved on the 1108-4 demo. synth/ = the first, self-made versions (sfx_make.py), kept as a fallback.",
+ "whoosh": {
+  "file": "mixkit/whoosh.wav",
+  "hit": 0.64,
+  "gain_db": -2.1,
+  "source": "Mixkit #1489 \"Air woosh\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/1489/1489.wav"
+ },
+ "whoosh_soft": {
+  "file": "mixkit/whoosh_soft.wav",
+  "hit": 0.28,
+  "gain_db": -3.1,
+  "source": "Mixkit #166 \"Fast small sweep transition\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/166/166.wav"
+ },
+ "swish": {
+  "file": "mixkit/swish.wav",
+  "hit": 0.33,
+  "gain_db": -3.6,
+  "source": "Mixkit #2608 \"Air zoom vacuum\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/2608/2608.wav"
+ },
+ "pop": {
+  "file": "mixkit/pop.wav",
+  "hit": 0.13,
+  "gain_db": 0.2,
+  "source": "Mixkit #2356 \"Dry pop up notification alert\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/2356/2356.wav"
+ },
+ "ding": {
+  "file": "mixkit/ding.wav",
+  "hit": 0.06,
+  "gain_db": 4.5,
+  "source": "Mixkit #3109 \"Relaxing bell chime\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/3109/3109.wav"
+ },
+ "kaching": {
+  "file": "mixkit/kaching.wav",
+  "hit": 0.08,
+  "gain_db": 4.1,
+  "source": "Mixkit #1993 \"Clinking coins\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/1993/1993.wav"
+ },
+ "tick": {
+  "file": "mixkit/tick.wav",
+  "hit": 0.0,
+  "gain_db": 1.8,
+  "source": "Mixkit #2568 \"Cool interface click tone\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/2568/2568.wav"
+ },
+ "riser": {
+  "file": "mixkit/riser.wav",
+  "hit": 2.03,
+  "gain_db": 7.7,
+  "source": "Mixkit #790 \"Cinematic trailer riser\"",
+  "url": "https://assets.mixkit.co/active_storage/sfx/790/790.wav"
+ }
+}
