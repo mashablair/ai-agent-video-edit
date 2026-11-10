@@ -14,6 +14,8 @@ Usage:  glorious.py numbers PROJECT.json [--dry]  -> spoken prices/years/percent
         glorious.py chunk PROJECT.json WD N      -> WD/glo_N.mp4 (video only)
         glorious.py assemble PROJECT.json WD OUT -> joins chunks + the source audio
         glorious.py hookbox PROJECT.json OUT.png -> the hook text box alone (to check it by eye)
+        glorious.py placehook PROJECT.json [--dry] -> puts the hook box below her chin (or above her head when there's
+                                                  room) and moves the captions under it while it shows
 Times are absolute; each chunk is rendered on an absolute timeline, so captions/B-roll can cross chunk edges."""
 import json, os, re, sys, subprocess, math
 from PIL import ImageFont
@@ -55,14 +57,19 @@ def load(pp):
                 pad=float(c.get("gPad",0.06)),line=float(c.get("gLine",0.72)),
                 colors={"small":c.get("color","#FCFCFC"),"big":c.get("color","#FCFCFC"),"serif":c.get("color","#FCFCFC"),
                         "script":c.get("gScriptColor",YELLOW),"yellow":c.get("gYellowColor",MUSTARD),"num":c.get("gNumColor",NUMCOL)},outline=float(c.get("gOutline",0.003)) if c.get("gOutlineOn") else 0.0,outline_c=c.get("gOutlineColor","#000000"),
-                shadow=float(c.get("gShadow",0.003)),shadow_op=float(c.get("gShadowOpacity",0.5)),shadow_blur=float(c.get("gShadowBlur",0.006)))
+                shadow=float(c.get("gShadow",0.003)),shadow_op=float(c.get("gShadowOpacity",0.5)),shadow_blur=float(c.get("gShadowBlur",0.006)),
+                cap_hook=hook_caps(p))
+def hook_caps(p):
+    """(a, b, y): captions move to y while the hook text shows (hookText.capY, set by placehook), so they never sit on the box."""
+    hb=dict(HBDEF,**(p.get("hookText") or {}))
+    return (hb["a"],hb["b"],float(hb["capY"])) if hb["enabled"] and hb["text"].strip() and hb.get("capY") is not None else None
 
 # Hook text and accent words (2026-11-10). The hook is a sentence in a box, in front of her, for the first seconds
 # (project "hookText"); the big words behind her head are accents through the video (project "accents" = [{text,a,b}],
 # one shared look in "accentStyle"). Projects from before keep working: their single "hook" word becomes one accent
 # (a hook in the old "card" style becomes the hook text).
 ACCDEF={"y":0.22,"size":0.34,"style":"neg","color":"#FFFFFF"}
-HBDEF={"enabled":False,"text":"","a":0.0,"b":6.0,"style":"serif","size":0.07,"y":0.56,"box":0.74}
+HBDEF={"enabled":False,"text":"","a":0.0,"b":6.0,"style":"serif","size":0.07,"y":0.56,"box":0.74,"capY":None}
 def legacy_hook(p):
     hk=p.get("hook")
     if not hk or "accents" in p: return
@@ -258,6 +265,8 @@ def layout(page,S,F):
     sp=0.22*em("small")
     on_b=any(b["a"]<=page[0]["s"]+0.05<b["b"] for b in S["broll"])
     cy=(S["cap_y_broll"] if on_b else S["cap_y"])*H
+    ch=S.get("cap_hook")
+    if ch and page[0]["s"]<ch[1] and page[-1]["e"]>ch[0]: cy=ch[2]*H   # under the hook text box while it shows
     fit=[]
     for r in rows:   # a single word wider than the padded frame shrinks to fit
         tot=sum(wlen(w,s)[0] for w,s in r)+sp*(len(r)-1); fit.append(min(1.0,maxw/tot))
@@ -487,6 +496,84 @@ def hookbox_png(S,path,hb):
     sh=Image.new("RGBA",(W,H),(0,0,0,0)); sh.putalpha(txt.getchannel("A").point(lambda v:round(v*0.35)))
     img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(3*W/1080)),(0,round(2*W/1080))); img.alpha_composite(txt)
     img.save(path)
+
+def zoom_at(S,t):
+    """Framing scale at time t: the same maths as the zoom expression in chunk and the editor's zoomAt."""
+    WH=[1.0,0.951,0.805,0.369,0.147,0.065,0.027,0.005,0.0]; chain_beats(S["zooms"]); b=v=f=1.0
+    for z in S["zooms"]:
+        ty=z.get("type","drift"); a_,b_=z["a"],z["b"]
+        if ty in ("beat","beatwhip"):
+            if not a_<=t<b_: continue
+            if ty=="beat":
+                e=float(z.get("ease",0.22)); fr=float(z.get("from",1.0)); u=min(max((t-a_)/max(e,0.001),0),1)
+                f=fr+(float(z.get("z",1.0))-fr)*(u*u*(3-2*u) if e>0 else 1)+float(z.get("creep",0.015))*(t-a_)
+            else:
+                u=(t-a_)/0.1; k=min(7,int(u)); to=float(z.get("to",1.0)); f=to+(float(z.get("z",1.55))-to)*(WH[k]+(WH[k+1]-WH[k])*(u-k))
+            continue
+        if ty=="zoomin":
+            r=float(z.get("ramp",0.7)); amp=z.get("z",1.22)-1; ss=lambda u:(lambda u:u*u*(3-2*u))(min(max(u,0),1))
+            if a_<=t<b_: b+=amp*ss((t-a_)/r)
+            elif b_<=t<b_+r: b+=amp*(1-ss((t-b_)/r))
+            continue
+        if not a_<=t<b_: continue
+        if ty=="whip": u=(t-a_)/0.1; k=min(7,int(u)); v=1+(z.get("z",1.55)-1)*(WH[k]+(WH[k+1]-WH[k])*(u-k))
+        elif ty=="hold": v=z.get("z",1.15)
+        else: v=1+(z.get("z",1.064)-1)*pow(min(max(1-(t-a_)/max(0.2,b_-a_),0),1),1.5)
+    w=sum(min(max((t-x["a"])/0.22,0),1)*(1-min(max((t-x["b"]-0.35)/0.22,0),1)) for x in accents(S))
+    return b*v*(1+(f-1)*(1-w))
+
+def face_track(S,a,b,step=0.2):
+    """Her head top (with hair) and chin, as fractions of the height in the FINAL frame (zooms applied), every `step`
+    seconds from a to b. Frames under B-roll are skipped (her face isn't on screen there)."""
+    import cv2
+    W,H=S["W"],S["H"]; q=540/W; det=cv2.FaceDetectorYN.create(os.path.join(HERE,"face_detection_yunet_2023mar.onnx"),"",(540,round(H*q)),0.6)
+    ay=H*float(S["p"].get("zoomAnchor",[0.5,0.5])[1]); cap=cv2.VideoCapture(S["src"]); fps=cap.get(cv2.CAP_PROP_FPS) or S["fps"]
+    cap.set(cv2.CAP_PROP_POS_FRAMES,int(a*fps)); i=int(a*fps); nxt=a; out=[]
+    while i/fps<=b:
+        ok=cap.grab(); t=i/fps; i+=1
+        if not ok: break
+        if t+1e-6<nxt or any(s["a"]<=t<s["b"] for s in S["broll"]): continue
+        nxt=t+step; _,fr=cap.retrieve(); _,fs=det.detect(cv2.resize(fr,(540,round(H*q))))
+        if fs is None or not len(fs): continue
+        x,y,w,h=[v/q for v in max(fs,key=lambda r:r[2]*r[3])[:4]]; z=zoom_at(S,t); Y=lambda v:(ay+(v-ay)*z)/H
+        out.append((round(t,2),float(Y(y-0.28*h)),float(Y(y+h))))   # YuNet's box: forehead to just under the chin; hair adds ~1/4 face height on top
+    return out
+
+HB_SAFE=(0.11,0.80)   # keep the hook box under Instagram's top bar and above its name/caption area
+def place_hook(pp,dry=False):
+    """Put the hook text box where it covers no part of her face (Maria, 2026-11-10: it covered her chin): below her
+    chin, or above her head when there's plenty of room there. Measured on the final framing (zooms included) over the
+    whole time the box shows. If the captions would touch the box, they move just below it while it shows (capY), and go
+    back to their usual height after. Also stores the measurements (hookText.place) so the editor re-places the box the
+    same way when she switches option or changes the size."""
+    P=json.load(open(pp)); S=load(pp); hb=hook_text(S)
+    if not hb: print("no hook text"); return
+    W,H=S["W"],S["H"]; tr=face_track(S,hb["a"],hb["b"])
+    if not tr: print("no face found while the hook shows; left as is"); return
+    top=min(r[1] for r in tr); chin=max(r[2] for r in tr)
+    F=Fonts(FONTDIR); off=0.0   # how far a caption page reaches above its centre line (fraction of H)
+    for a,b_,g in paginate(S,F):
+        if g[0]["s"]<hb["b"] and g[-1]["e"]>hb["a"]:
+            for w,st,x,bl,e,fsp in layout(g,dict(S,cap_y=0,cap_y_broll=0,cap_hook=None),F): off=max(off,-(bl-0.78*e)/H)
+    pl={"top":round(top,4),"chin":round(chin,4),"capOff":round(off,4),"capNormal":S["cap_y"],
+        "capB":S["cap_y_broll"] if any(s["a"]<hb["b"] and s["b"]>hb["a"] for s in S["broll"]) else None}
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        hookbox_png(S,os.path.join(td,"b.png"),hb); from PIL import Image
+        bb=Image.open(os.path.join(td,"b.png")).getchannel("A").getbbox(); bh=(bb[3]-bb[1])/H
+    y,capY,where=hook_spot(pl,bh)
+    print(f"face over {len(tr)} frames: head top {top:.3f}, chin {chin:.3f}; box {bh:.3f} tall -> {where}, centre y {y:.3f}"
+          +(f"; captions move to {capY:.3f} while it shows" if capY is not None else "; captions stay put"))
+    if dry: return
+    P.setdefault("hookText",{}).update(y=y,capY=capY,place=pl,auto=True); json.dump(P,open(pp,"w"),indent=1)
+
+def hook_spot(pl,bh,gap=0.03):
+    """(box centre y, caption y while it shows or None, "above"/"below"). Same rule as the editor's hookSpot."""
+    lo,hi=HB_SAFE; free=pl["top"]-gap-lo
+    if free-bh>=0.06: return round((lo+pl["top"]-gap)/2,3),None,"above her head"
+    y=min(pl["chin"]+gap+bh/2,hi-bh/2); where="below her chin" if y-bh/2>=pl["chin"]+0.01 else f"low as allowed (touches her chin by {pl['chin']+0.01-(y-bh/2):.3f})"
+    need=y+bh/2+0.02+pl["capOff"]; norm=min(pl["capNormal"],pl["capB"] if pl.get("capB") is not None else 9)
+    return round(y,3),(round(need,3) if need>norm else None),where
 
 def accent_mask(S,hk,wd):
     """Person cut-out (Robust Video Matting) for one accent word's window, so the word sits behind her. Named by its
@@ -720,6 +807,7 @@ if __name__=="__main__":
     elif cmd=="chunk": chunk(pp,sys.argv[3],int(sys.argv[4]))
     elif cmd=="hookbox":   # glorious.py hookbox PROJECT OUT.png: the hook text box alone, for checking by eye
         S=load(pp); hb=hook_text(S); hookbox_png(S,sys.argv[3],hb) if hb else print("no hook text in this project")
+    elif cmd=="placehook": place_hook(pp,"--dry" in sys.argv)
     elif cmd=="autozoom":   # plan the zooms (approved Oct 21: Captions-style framing changes every ~1.5s + whips)
         autozoom(pp)
     elif cmd=="anchors":   # fill missing face anchors (fractions) for zooms

@@ -224,7 +224,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
         <canvas id="hbCanvas"></canvas>
         <div id="hbHit" title="Drag up or down to move the hook text"></div>
         <div id="capGuide"></div>
-        <div id="capBox" title="Drag to move the captions"></div>
+        <div id="capBox" title="Drag to move the captions (while the hook text shows, this moves them only for that time)"></div>
         <div id="hlBox"></div>
         <div id="hookBox" title="Drag up or down to move the accent words"></div>
         <canvas id="hookDeco"></canvas>
@@ -826,7 +826,7 @@ function gloHTML(ch,sw){
 function gloDraw(t,ch){const box=$('#capBox'),st=$('#stage'),sw=st.clientWidth,sh=st.clientHeight,c=cfg();
   if(box.dataset.key!=='g'+ch.a){box.dataset.key='g'+ch.a;box.innerHTML=gloHTML(ch,sw);box.style.display='block';
     const t0=ch.words[0].s+0.05,onB=slots().some(s=>s.a<=t0&&t0<s.b);
-    box.style.left=(c.x*sw-box.offsetWidth/2)+'px';box.style.top=((onB?c.yB:c.y)*sh-box.offsetHeight/2)+'px'}
+    box.style.left=(c.x*sw-box.offsetWidth/2)+'px';box.style.top=((hookCapY(ch)??(onB?c.yB:c.y))*sh-box.offsetHeight/2)+'px'}
   box.querySelectorAll('.gw').forEach(el=>el.classList.toggle('on',t>=+el.dataset.s-0.04))}
 const WHIP=[1,0.951,0.805,0.369,0.147,0.065,0.027,0.005,0];
 const ss=u=>{u=Math.min(1,Math.max(0,u));return u*u*(3-2*u)};
@@ -857,7 +857,19 @@ function setPref(k,v){try{localStorage.setItem('ve.'+k,JSON.stringify(v))}catch{
    behind her head at big moments (project.accents [{text,a,b}], one shared look in project.accentStyle). An older
    project's single "hook" word becomes one accent (same as glorious.py legacy_hook). */
 const ACCDEF={y:0.22,size:0.34,style:'neg',color:'#FFFFFF',outlineOn:false,outline:0.004,outlineColor:'#000000',shadowOn:false,shadow:0.006,shadowBlur:0.008,shadowOpacity:0.5};
-const HBDEF={enabled:false,text:'',options:[],a:0,b:6,style:'serif',size:0.07,y:0.56,box:0.74};
+const HBDEF={enabled:false,text:'',options:[],a:0,b:6,style:'serif',size:0.07,y:0.56,box:0.74,capY:null};
+// captions move to hookText.capY while the hook text shows (so they never sit on the box), then go back (same as glorious.py)
+const hookCapY=ch=>{const h=hbox();return h.enabled&&h.text.trim()&&h.capY!=null&&ch.words[0].s<h.b&&ch.words.at(-1).e>h.a?h.capY:null};
+/* where the hook box goes (same rule as glorious.py hook_spot): above her head when there's plenty of room under Instagram's
+   top bar, else just below her chin; captions drop below the box while it shows if they'd touch it. hookText.place holds
+   her head top / chin measured over the whole hook (zooms included) by glorious.py placehook. */
+const HB_SAFE=[0.11,0.80];
+function hookSpot(pl,bh,gap=0.03){const [lo,hi]=HB_SAFE,free=pl.top-gap-lo;if(free-bh>=0.06)return{y:r3((lo+pl.top-gap)/2),capY:null};
+  const y=Math.min(pl.chin+gap+bh/2,hi-bh/2),need=y+bh/2+0.02+pl.capOff,norm=Math.min(pl.capNormal,pl.capB??9);return{y:r3(y),capY:need>norm?r3(need):null}}
+const r3=v=>Math.round(v*1000)/1000;
+function autoPlace(force){const h=hbox(),st=$('#stage');if(!h.place||(!force&&h.auto===false)||!h.text.trim()||h.style==='card')return;
+  const W=st.clientWidth,H=st.clientHeight,L=hbLayout(h,W),s=L.st,bh=(L.lines.length*s[6]*L.em+2*s[8]*L.em)/H;
+  S.proj.hookText=Object.assign(h,hookSpot(Object.assign({},h.place,{capNormal:cfg().y}),bh),{auto:true});S.capCache=null;$('#capBox').dataset.key=''}
 function legacyHook(P){const hk=P.hook;if(!hk){if(!P.accents)P.accents=[];return}
   if(!P.accents){const on=hk.enabled&&hk.text;
     if(hk.style==='card'){P.accents=[];if(on&&!P.hookText)P.hookText=Object.assign({},HBDEF,{enabled:true,text:hk.text,a:hk.a,b:hk.b,style:'card',y:hk.y??0.6,size:hk.size??0.052})}
@@ -983,12 +995,15 @@ function dragY(e,get,set,redraw){ // drag a hook / accent layer up or down on th
   el.onpointermove=ev=>{set(Math.round(Math.max(.04,Math.min(.92,o.y+(ev.clientY-o.cy)/st.height))*1000)/1000);S.dirty=true;redraw()};
   el.onpointerup=()=>{el.onpointermove=el.onpointerup=null;endEdit();setStatus();if(S.tab==='hook')renderHookPanel()}}
 $('#hookBox').onpointerdown=e=>dragY(e,()=>accStyle().y,v=>{S.proj.accentStyle=Object.assign({},S.proj.accentStyle,{y:v})},()=>drawHook(main.currentTime));
-$('#hbHit').onpointerdown=e=>dragY(e,()=>hbox().y,v=>{S.proj.hookText=Object.assign(hbox(),{y:v})},()=>drawHookText(main.currentTime));
+$('#hbHit').onpointerdown=e=>dragY(e,()=>hbox().y,v=>{S.proj.hookText=Object.assign(hbox(),{y:v,auto:false})},()=>drawHookText(main.currentTime));
 $('#capBox').onpointerdown=e=>{
   if(!S.proj)return;e.preventDefault();const box=e.currentTarget,st=$('#stage').getBoundingClientRect(),c=cfg();
-  const o={x:c.x,y:c.y,cx:e.clientX,cy:e.clientY};box.setPointerCapture(e.pointerId);beginEdit();
+  const T=main.currentTime,h=hbox(),dur_hook=c.engine==='glorious'&&h.enabled&&h.text.trim()&&T>=h.a&&T<=h.b;   // while the hook shows: moves only the captions' height during the hook
+  const o={x:c.x,y:dur_hook?(h.capY??c.y):c.y,cx:e.clientX,cy:e.clientY};box.setPointerCapture(e.pointerId);beginEdit();
   box.onpointermove=ev=>{let x=o.x+(ev.clientX-o.cx)/st.width,y=o.y+(ev.clientY-o.cy)/st.height;const snap=Math.abs(x-.5)<.02;if(snap)x=.5;
-    c.x=Math.round(Math.max(.05,Math.min(.95,x))*1000)/1000;c.y=Math.round(Math.max(.05,Math.min(.95,y))*1000)/1000;
+    y=Math.round(Math.max(.05,Math.min(.95,y))*1000)/1000;
+    if(dur_hook){S.proj.hookText=Object.assign(hbox(),{capY:y});S.capCache=null;box.dataset.key='';drawCaption(main.currentTime);return}
+    c.x=Math.round(Math.max(.05,Math.min(.95,x))*1000)/1000;c.y=y;
     $('#capGuide').style.display=snap?'block':'none';applyCapStyle();if(c.engine==='glorious'){box.dataset.key='';drawCaption(main.currentTime)}};
   box.onpointerup=()=>{box.onpointermove=box.onpointerup=null;$('#capGuide').style.display='none';endEdit();capChanged(false);if(S.tab==='cap')renderCapPanel()};
 };
@@ -1118,9 +1133,11 @@ function renderHookPanel(){
     ${rng('hbSize','Text size',0.04,0.11,0.001,h.size,px(h.size))}
     ${rng('hbBox','Box opacity',0,1,0.02,h.box,pc(h.box))}
     ${rng('hbY','Height',0.1,0.88,0.005,h.y,pc(h.y))}
+    ${h.place?`<div class="ctl"><label>Position</label><button id="hbAuto"${h.auto!==false?' disabled':''}>${h.auto!==false?'✓ Auto (clear of your face)':'Auto-place clear of your face'}</button></div>`:''}
+    <div class="ctl"><label class="tog" style="width:92px" title="Where the captions sit while the hook text shows; they go back to their usual height after it"><input type="checkbox" id="hbCapOn"${h.capY!=null?' checked':''}> Captions</label><input type="range" id="hbCapY" min="0.4" max="0.92" step="0.005" value="${h.capY??cfg().y}"${h.capY!=null?'':' disabled'}><span class="out" id="hbCapYO">${h.capY!=null?pc(h.capY):'usual'}</span></div>
     <div class="ctl"><label>Shows</label><input type="number" id="hbA" step="0.1" min="0" value="${h.a}" style="width:70px"><span class="muted small">to</span><input type="number" id="hbB" step="0.1" min="0" value="${h.b}" style="width:70px"><span class="muted small">s (${(h.b-h.a).toFixed(1)}s)</span></div>
     <div class="ctl"><label>Until the end of</label><button data-sn="1">1st sentence</button><button data-sn="2">2nd</button><button data-sn="3">3rd</button></div>
-    <div class="muted small">Drag the box on the preview to move it. It sits in front of you and fades out at its end time. Keep it above the captions and away from the bottom, where Instagram puts your name and caption.</div>
+    <div class="muted small">Auto keeps the box off your face (below your chin, or above your head when there's room) and follows when you switch the text or size. Dragging the box or the Height slider turns Auto off. "Captions" = their height while the hook shows (tick it to move them out of the box's way); they go back to normal after. Keep everything away from the bottom, where Instagram puts your name and caption.</div>
     <h4>Accent words (big, behind you)</h4>
     <div id="acList">${A.map((x,i)=>`<div class="zl"><span class="t" data-as="${i}">${fmt(x.a)}</span><input type="text" data-at="${i}" value="${escH(x.text)}"><input type="number" step="0.05" data-aa="${i}" value="${x.a}" title="Starts at"><input type="number" step="0.05" data-ab="${i}" value="${x.b}" title="Ends at"><button data-ax="${i}" title="Remove">×</button></div>`).join('')||'<div class="muted small">No accent words yet.</div>'}</div>
     <div class="row"><button id="acAdd">+ Accent word at playhead</button></div>
@@ -1136,14 +1153,18 @@ function renderHookPanel(){
     <div class="muted small">Drag an accent word on the preview to move them all up or down.</div>`;
   const t=()=>main.currentTime;
   const showHB=()=>{const h=hbox();if(t()<h.a||t()>h.b)seek(h.a+Math.min(1,(h.b-h.a)/2));else drawHookText(t())};
-  const hbset=(k,v,full)=>{S.proj.hookText=Object.assign(hbox(),{[k]:v});S.dirty=true;setStatus();drawHookText(t());if(full){renderTimeline();renderHookPanel();showHB()}};
+  const hbset=(k,v,full)=>{S.proj.hookText=Object.assign(hbox(),{[k]:v});if(['text','size','style','enabled'].includes(k))autoPlace();if(k==='y')S.proj.hookText.auto=false;
+    S.dirty=true;setStatus();S.capCache=null;$('#capBox').dataset.key='';drawCaption(t());drawHookText(t());if(full){renderTimeline();renderHookPanel();showHB()}};
   const acset=(k,v)=>{S.proj.accentStyle=Object.assign({},S.proj.accentStyle,{[k]:v});S.dirty=true;setStatus();const A=S.proj.accents||[];if(A.length&&!accentAt(t()))seek(A[0].a+0.8);else drawHook(t())};
   $('#hbOn').onchange=e=>{pushUndo();if(e.target.checked&&!hbox().text.trim()&&opts[0])hbset('text',opts[0].text);hbset('enabled',e.target.checked,true)};
   P.querySelectorAll('[data-o]').forEach(el=>el.onchange=()=>{pushUndo();hbset('enabled',true);hbset('text',opts[+el.dataset.o].text,true)});
   $('#hbText').onfocus=beginEdit;$('#hbText').oninput=e=>{hbset('text',e.target.value);showHB()};$('#hbText').onchange=()=>{endEdit();renderTimeline();renderHookPanel()};
   $('#hbStyle').onchange=e=>{pushUndo();hbset('style',e.target.value,true)};
   for(const [id,k,f] of [['hbSize','size',px],['hbBox','box',pc],['hbY','y',pc]]){const el=$('#'+id);
-    el.onpointerdown=beginEdit;el.oninput=()=>{hbset(k,+el.value);$('#'+id+'O').textContent=f(+el.value);showHB()};el.onchange=()=>endEdit()}
+    el.onpointerdown=beginEdit;el.oninput=()=>{hbset(k,+el.value);$('#'+id+'O').textContent=f(+el.value);showHB()};el.onchange=()=>{endEdit();renderHookPanel()}}
+  if($('#hbAuto'))$('#hbAuto').onclick=()=>{pushUndo();autoPlace(true);hbset('auto',true,true)};
+  $('#hbCapOn').onchange=e=>{pushUndo();hbset('capY',e.target.checked?r3(Math.min(0.92,hbox().y+0.14)):null,true)};
+  {const el=$('#hbCapY');el.onpointerdown=beginEdit;el.oninput=()=>{hbset('capY',+el.value);$('#hbCapYO').textContent=pc(+el.value);showHB()};el.onchange=()=>endEdit()}
   $('#hbA').onchange=e=>{pushUndo();hbset('a',r2(Math.max(0,+e.target.value)),true)};
   $('#hbB').onchange=e=>{pushUndo();hbset('b',r2(+e.target.value),true)};
   P.querySelectorAll('[data-sn]').forEach(b=>b.onclick=()=>{const W=S.proj.words,ends=W.filter(w=>w.s>=hbox().a&&/[.!?]["”]?$/.test(w.w)),w=ends[+b.dataset.sn-1];

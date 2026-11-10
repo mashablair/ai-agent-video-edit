@@ -15,8 +15,8 @@ muted" or "+340% reach") can't be traced to a primary source, so don't quote the
 - **Curiosity gap with a fair payoff.** Show the outcome or the question and withhold the answer. The answer must come
   soon: a payoff 20 s into a 35 s video feels like a trick. Note in the `why` when the payoff arrives (e.g. "pays off at 0:12").
 - **Call out the exact viewer and situation.** Specific beats general ("Planning date #3 yourself?" beats "Dating tips").
-- **Her face in the first frame, talking right away.** Already true for her videos; the box sits over her chest so her
-  face stays visible.
+- **Her face in the first frame, talking right away.** Already true for her videos; the box never covers her face
+  (`glorious.py placehook` puts it below her chin, or above her head when there's room).
 - **Test.** Hook styles can be compared by posting otherwise identical content and watching 3-second hold, average
   watch time and saves. If she ever shares her Instagram insights, use them to learn which formula works for HER
   audience, and record what you learn below.
