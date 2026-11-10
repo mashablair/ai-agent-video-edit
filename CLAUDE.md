@@ -1,6 +1,7 @@
 # Maria's video studio: Glorious Goddess (GG) + MariaTalksTech (MTT)
 
 This folder is Maria's short-form video pipeline. Raw iPhone talking-head videos go in, finished vertical reels come out.
+**Her goal (2026-11-10):** she records a video (scripted or not), drops it in, and Claude does all the work here, including the hook, so she can take the final video and post it. Automate as much as possible and save her time.
 Maria is a senior developer (Angular/TypeScript), so technical detail is fine. In replies, keep the focus on what she needs to watch for or decide.
 
 Deep reference: `_agent/VIDEO_EDITING_HANDOFF.md` is the full technical history: every tool tried, every bug and fix, every approved rule.
@@ -26,7 +27,7 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 | She says | Skill |
 |---|---|
 | "clean up / polish <video>", "render my cuts for <name>" | `polish-talking-video` (step 1: cuts and studio voice only) |
-| "add the visuals / Glorious look to <name>", "render my edits for <name>" | `glorious-visuals` (step 2: captions, zooms, B-roll, hook, cards). Edits from the Video Editor render with one command: `_agent/render_edits.py <name>` |
+| "add the visuals / Glorious look to <name>", "render my edits for <name>" | `glorious-visuals` (step 2: captions, zooms, B-roll, hook text with 3 options, accent words, cards). Edits from the Video Editor render with one command: `_agent/render_edits.py <name>` |
 | "just add B-roll to <name>" | `add-broll-to-video` (older, simpler B-roll-only path) |
 | "update the B-roll library" | `update-broll-library` |
 | "make a thumbnail for <name>" (with or without a headline) | `glorious-thumbnail` (step 3: `_agent/thumbnail.py`, 3 options in `Videos/<name>/`) |
@@ -91,4 +92,5 @@ Finished videos stay in `Videos/<name>/`. She AirDrops them to her phone or open
 - GG = Maria's personal brand for women 40+: leaving unhappy relationships, starting over, building a happy single life, with dating as one part of it. The signature mark is the 🐆 leopard.
 - Brand palette: cream, blush, deep burgundy, soft gold. Her voice is direct, first-person and story-first.
 - MTT = AI for non-technical women.
-- Captions, hooks, titles and post strategy are worked out in her Claude "Glorious Goddess" project, not here. This folder is production.
+- Hooks are written here, in step 2 (3 options per video, guide in `.claude/skills/glorious-visuals/hooks.md`), and so are thumbnail headlines (step 3). When she brings a hook, title or headline from her other Claude work along with the video, use hers as the pick.
+- Post captions and strategy still mostly come from her Claude "Glorious Goddess" project; help with them here when she asks.

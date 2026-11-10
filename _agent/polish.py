@@ -627,7 +627,7 @@ def _r2c(x,L,o):
     return o[-1],False
 
 def remap(projpath,brollpath):
-    """After a re-cut: move the visuals (captions words, B-roll, cards, zooms, hook) from the old clean timeline to the new one."""
+    """After a re-cut: move the visuals (captions words, B-roll, cards, zooms, hook text, accent words) from the old clean timeline to the new one."""
     import shutil, time
     P=J(projpath); B=J(brollpath); old,new=B.get("cutKeep") or P["renderedKeep"],P["keep"]; oo,on=_offs(old),_offs(new)
     if len(old)==len(new) and all(abs(x-y)<5e-4 for o,n in zip(old,new) for x,y in zip(o,n)):   # the Video Editor already laid the visuals out on this cut
@@ -656,6 +656,13 @@ def remap(projpath,brollpath):
             keepi.append(dict(it,a=round(a,3),b=round(b,3)))
         B[key]=keepi
     if B.get("hook"): B["hook"]["a"]=round(mp(B["hook"]["a"])[0],3); B["hook"]["b"]=round(mp(B["hook"]["b"])[0],3)
+    if B.get("hookText"): B["hookText"]["a"]=round(mp(B["hookText"]["a"])[0],3); B["hookText"]["b"]=round(mp(B["hookText"]["b"])[0],3)
+    acc=[]
+    for x in B.get("accents",[]):   # accent words (2026-11-10)
+        a_,_=mp(x["a"]); b_,_=mp(x["b"])
+        if b_-a_<0.15: flags.append(f"accent '{x['text']}' was on cut material and was removed"); continue
+        acc.append(dict(x,a=round(a_,3),b=round(b_,3)))
+    if "accents" in B: B["accents"]=acc
     if B.get("whipAt"): B["whipAt"]=[round(mp(t)[0],3) for t in B["whipAt"]]
     B["duration"]=round(on[-1],3); B["status"]="edited"; B["cutKeep"]=new
     W_(brollpath,B); P["renderedKeep"]=new; W_(projpath,P)

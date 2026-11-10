@@ -80,8 +80,21 @@ main{display:grid;grid-template-columns:minmax(0,1fr) var(--side,380px);min-heig
 #cutText .jn{display:inline-block;width:9px;height:17px;vertical-align:-3px;margin:0 2px;border-left:2px solid #5a6168;cursor:pointer}
 #cutText .jn:hover,#cutText .jn.on{border-color:var(--accent)}
 #cutBan{margin:10px 14px 0;padding:8px 10px;border-radius:8px;background:rgba(244,162,97,.12);color:var(--warn);font-size:13px;display:none}
-#paneCap.on{display:block}
-#paneCap h4{margin:16px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+#paneCap.on,#paneHook.on{display:block}
+#paneHook{overflow:auto;padding:14px;display:none}
+#hbCanvas{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+#hbHit{position:absolute;display:none;cursor:ns-resize;touch-action:none}
+#hbHit:hover{outline:1px dashed rgba(255,255,255,.55);outline-offset:4px}
+.hopt{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin:6px 0;cursor:pointer;font-size:13.5px;line-height:1.35}
+.hopt.on{border-color:var(--accent);background:rgba(76,201,240,.08)}
+.hopt input{margin-top:3px}
+.hopt .why{display:block;color:var(--mute);font-size:12px;margin-top:2px}
+#hbText{width:100%;min-height:58px;resize:vertical;font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+#marks{position:absolute;inset:0}
+.mk{position:absolute;top:2px;height:20px;border-radius:5px;font-size:11px;line-height:16px;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:#fff;box-sizing:border-box}
+.mk.hb{background:#6E1A2E;border:1px solid #b5485f}
+.mk.ac{background:#5b4a7a;border:1px solid #9d86c9}
+#paneHook h4,#paneCap h4{margin:16px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
 .presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .preset{height:78px;padding:4px;background:#3a4048;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;line-height:1.1;font-size:15px;paint-order:stroke fill}
 .preset .pn{font:600 11px/1 -apple-system,BlinkMacSystemFont,sans-serif;color:#d9dce0;letter-spacing:.02em}
@@ -208,10 +221,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
       <div id="stage">
         <div id="mainWrap"><video class="pv" muted playsinline preload="auto"></video><video class="pv" muted playsinline preload="auto"></video><video class="pv" muted playsinline preload="auto"></video></div>
         <video id="ov" muted playsinline preload="auto"></video>
+        <canvas id="hbCanvas"></canvas>
+        <div id="hbHit" title="Drag up or down to move the hook text"></div>
         <div id="capGuide"></div>
         <div id="capBox" title="Drag to move the captions"></div>
         <div id="hlBox"></div>
-        <div id="hookBox" title="Drag up or down to move the hook word"></div>
+        <div id="hookBox" title="Drag up or down to move the accent words"></div>
         <canvas id="hookDeco"></canvas>
         <div id="tileBox"></div>
         <div id="flash"></div>
@@ -228,7 +243,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
     </section>
     <aside>
       <div id="sideGrip" title="Drag to make the panel wider or narrower (double-click to reset)"></div>
-      <div id="tabs"><button data-tab="cut">Cut</button><button data-tab="broll" class="on">B-roll</button><button data-tab="cap">Captions</button></div>
+      <div id="tabs"><button data-tab="cut">Cut</button><button data-tab="broll" class="on">B-roll</button><button data-tab="cap">Captions</button><button data-tab="hook">Hook</button></div>
       <div id="paneCut"><div id="cutBan"></div><div id="cutHead"></div><div id="cutAct"></div><div id="cutText"></div>
         <div class="muted small" style="padding:8px 14px;border-top:1px solid var(--line)">Click a word to jump there. Drag across words to select. <kbd>⌫</kbd> cut · <kbd>R</kbd> restore · click a <span style="border-left:2px solid #5a6168;padding-left:3px">join</span> to shorten or lengthen its pause. Captions and B-roll move with your cuts.</div></div>
       <div class="pane on" id="paneBroll">
@@ -243,6 +258,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
         </div>
       </div>
       <div id="paneCap"></div>
+      <div id="paneHook"></div>
     </aside>
   </main>
   <footer>
@@ -258,7 +274,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
         <div id="ruler"></div>
         <div id="wordsTrack"></div>
         <div id="brollTrack" title="Double-click an empty spot to add B-roll"></div>
-        <div id="faceTrack"><span>Your video</span></div>
+        <div id="faceTrack"><span>Your video</span><div id="marks"></div></div>
         <div id="playhead"></div>
       </div>
     </div>
@@ -465,7 +481,7 @@ async function start(){
 $('#projSel').onchange=async e=>{if(S.dirty&&!confirm('You have unsaved edits. Switch anyway?')){e.target.value=S.projFile;return}await loadProject(e.target.value)};
 async function loadProject(f){
   S.projFile=f;S.proj=JSON.parse(await (await S.vid.file(f)).text());
-  S.proj.slots.sort((a,b)=>a.a-b.a);S.sel=null;S.undo=[];S.redo=[];S.dirty=false;S.wordSel=-1;S.capCache=null;
+  legacyHook(S.proj);S.proj.slots.sort((a,b)=>a.a-b.a);S.sel=null;S.undo=[];S.redo=[];S.dirty=false;S.wordSel=-1;S.capCache=null;
   S.proj.captions=Object.assign({},CAP_DEFAULT,S.defStyle||{},{enabled:false},S.proj.captions||{});
   $('#capTog').checked=!!S.proj.captions.enabled;
   const stem=S.proj.video.split('/').pop().replace(/\.[^.]+$/,'').replace(/\(\d+\)$/,'');
@@ -478,7 +494,7 @@ async function loadProject(f){
     S.rawOK=await S.vid.has(S.cut.src);await main.load(S.cutFile);$('#toast').style.display='none'}catch(e){toast('Couldn’t load this video’s editor files: '+e.message,8000);return}
   S.csel=null;S.cjoin=null;lastChunk=null;
   if(!sameK(S.keep,S.cut.keep)){const r=applyKeep(S.cut.keep,0);S.dirty=true;toast(`Brought in the cuts you saved in the detailed cut editor${r.msg}. Save to keep them.`,8000)}
-  renderAll();renderCut();setStatus();applyCapStyle();drawCaption(0);applySpeed();
+  renderAll();renderCut();setStatus();applyCapStyle();drawCaption(0);applySpeed();if(S.tab==='hook')renderHookPanel();
 }
 async function clipURL(id){if(!S.urls[id])S.urls[id]=URL.createObjectURL(await S.lib.file('clips/'+id+'.mp4'));return S.urls[id]}
 async function thumbURL(id){if(!S.thumbs[id]){try{S.thumbs[id]=URL.createObjectURL(await S.lib.file('_catalog/thumbs/'+id+'.jpg'))}catch{S.thumbs[id]=''}}return S.thumbs[id]}
@@ -486,9 +502,9 @@ async function thumbURL(id){if(!S.thumbs[id]){try{S.thumbs[id]=URL.createObjectU
 /* ---------- state helpers ---------- */
 const slots=()=>S.proj?S.proj.slots:[];
 const dur=()=>S.proj?(S.proj.duration||main.duration||0):0;
-function snapshot(){return JSON.stringify({keep:S.keep,duration:S.proj.duration,slots:slots(),captions:S.proj.captions,words:S.proj.words,zooms:S.proj.zooms||[],tiles:S.proj.tiles||[],hook:S.proj.hook||null,speed:S.proj.speed||1})}
+function snapshot(){return JSON.stringify({keep:S.keep,duration:S.proj.duration,slots:slots(),captions:S.proj.captions,words:S.proj.words,zooms:S.proj.zooms||[],tiles:S.proj.tiles||[],hookText:S.proj.hookText||null,accents:S.proj.accents||[],accentStyle:S.proj.accentStyle||{},speed:S.proj.speed||1})}
 function pushUndo(){S.undo.push(snapshot());if(S.undo.length>200)S.undo.shift();S.redo=[]}
-function restore(js){const i=S.sel?slots().indexOf(S.sel):-1;const o=JSON.parse(js);if(o.keep&&!sameK(o.keep,S.keep)){S.keep=o.keep;S.proj.duration=o.duration;main.setKeep(S.keep,Math.min(main.currentTime,o.duration));S.csel=null;S.cjoin=null;finalStart()}S.proj.slots=o.slots;S.proj.captions=o.captions;S.proj.words=o.words;S.proj.zooms=o.zooms||[];S.proj.tiles=o.tiles||[];S.proj.hook=o.hook||undefined;if(o.speed&&o.speed!==1)S.proj.speed=o.speed;else delete S.proj.speed;applySpeed();
+function restore(js){const i=S.sel?slots().indexOf(S.sel):-1;const o=JSON.parse(js);if(o.keep&&!sameK(o.keep,S.keep)){S.keep=o.keep;S.proj.duration=o.duration;main.setKeep(S.keep,Math.min(main.currentTime,o.duration));S.csel=null;S.cjoin=null;finalStart()}S.proj.slots=o.slots;S.proj.captions=o.captions;S.proj.words=o.words;S.proj.zooms=o.zooms||[];S.proj.tiles=o.tiles||[];S.proj.hookText=o.hookText||undefined;S.proj.accents=o.accents||[];S.proj.accentStyle=o.accentStyle||{};if(S.tab==='hook')renderHookPanel();if(o.speed&&o.speed!==1)S.proj.speed=o.speed;else delete S.proj.speed;applySpeed();
   S.sel=S.proj.slots[i]||null;S.capCache=null;lastChunk=null;$('#capBox').dataset.key='';$('#capTog').checked=!!S.proj.captions.enabled;markDirty();renderCut();applyCapStyle();sync()}
 function beginEdit(){if(S.editing===null&&S.proj)S.editing=snapshot()}
 function endEdit(){if(S.editing!==null){const now=snapshot();if(now!==S.editing){S.undo.push(S.editing);S.redo=[]}S.editing=null;setStatus()}}
@@ -526,6 +542,7 @@ function warnings(){
     if(/lips move|mouth/i.test(c.scene||''))W.push({s,m:`${nm}: your lips move in this clip`});
     if(nm==='photo-me-and-bond')W.push({s,m:`photo-me-and-bond is for joke use only`});
     if(!S.clipMap[nm])W.push({s,m:`${nm} isn’t in the library`});
+    for(const x of (S.proj.accents||[]))if(x.a<s.b&&x.b>s.a)W.push({s,m:`${nm} covers the accent word “${x.text.replace(/\|/g,' ')}” (it needs your face)`});
   }
   return W;
 }
@@ -550,6 +567,11 @@ function renderTimeline(){
     thumbURL(s.clip).then(u=>{if(u)el.style.backgroundImage=`url("${u}")`});
     el.onpointerdown=e=>dragSlot(e,s,el);
     bt.appendChild(el)});
+  const hb=hbox();let mk='';
+  if(hb.enabled&&hb.text.trim())mk+=`<div class="mk hb" data-mk="hb" style="left:${hb.a*pps}px;width:${Math.max(30,(hb.b-hb.a)*pps)}px" title="Hook text: ${escH(hb.text)}">Hook · ${escH(hb.text.replace(/[*|]/g,' '))}</div>`;
+  (S.proj.accents||[]).forEach((x,i)=>mk+=`<div class="mk ac" data-mk="${i}" style="left:${x.a*pps}px;width:${Math.max(30,(x.b-x.a)*pps)}px" title="Accent word">${escH(x.text.replace(/\|/g,' '))}</div>`);
+  $('#marks').innerHTML=mk;
+  $('#marks').querySelectorAll('.mk').forEach(el=>el.onclick=e=>{e.stopPropagation();const k=el.dataset.mk,it=k==='hb'?hbox():S.proj.accents[+k];setTab('hook');seek(it.a+(k==='hb'?1:0.8))});
   const cov=L.reduce((n,s)=>n+s.b-s.a,0);
   $('#cov').innerHTML=`B-roll <b style="color:var(--text)">${cov.toFixed(1)}s</b> of ${D.toFixed(1)}s · <b style="color:var(--text)">${Math.round(cov/(D||1)*100)}%</b> · ${L.length} clips`;
 }
@@ -708,7 +730,7 @@ $('#wordsTrack').ondblclick=e=>{const w=e.target.closest('.w');if(!w)return;S.wo
   setTimeout(()=>{const i=$('#weText');if(i){i.focus();i.select()}},0)};
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setTab(t){S.tab=t;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
-  $('#paneBroll').classList.toggle('on',t==='broll');$('#paneCap').classList.toggle('on',t==='cap');$('#paneCut').classList.toggle('on',t==='cut');if(t==='cap')renderCapPanel();if(t==='cut')renderCut()}
+  $('#paneBroll').classList.toggle('on',t==='broll');$('#paneCap').classList.toggle('on',t==='cap');$('#paneCut').classList.toggle('on',t==='cut');$('#paneHook').classList.toggle('on',t==='hook');if(t==='cap')renderCapPanel();if(t==='cut')renderCut();if(t==='hook')renderHookPanel()}
 
 /* ---------- playback & preview sync ---------- */
 function applySpeed(){const v=1; // test plays at 1x only
@@ -720,7 +742,7 @@ $('#playBtn').onclick=()=>main.paused?main.play():main.pause();
 main.onplay=()=>{$('#playBtn').textContent='❚❚';applySpeed()};main.onpause=()=>{$('#playBtn').textContent='▶';ov.pause();sync()};
 let ovFor=null;
 async function sync(){
-  if(!S.proj)return;const t=main.currentTime,s=slotAt(t);drawCaption(t);drawHL(s);drawZoom(t);drawTile(t);drawHook(t);
+  if(!S.proj)return;const t=main.currentTime,s=slotAt(t);drawCaption(t);drawHL(s);drawZoom(t);drawTile(t);drawHook(t);drawHookText(t);
   if(s&&S.clipMap[s.clip]){
     const want=(s.from||0)+(t-s.a);
     if(ovFor!==s.clip){ovFor=s.clip;try{ov.src=await clipURL(s.clip)}catch{toast('Missing clip file: '+s.clip);return}await new Promise(r=>{ov.onloadedmetadata=r;setTimeout(r,800)})}
@@ -817,7 +839,10 @@ function zoomAt(t){let b=1,v=1,f=1;chainBeats();for(const z of (S.proj.zooms||[]
     if(ty==='zoomin'){const r=z.ramp||0.7,a=(z.z||1.22)-1;if(t>=z.a&&t<z.b)b+=a*ss((t-z.a)/r);else if(t>=z.b&&t<z.b+r)b+=a*(1-ss((t-z.b)/r));continue}
     if(t<z.a||t>=z.b)continue;
     if(ty==='whip'){const u=(t-z.a)/0.1,k=Math.min(7,Math.floor(u));v=1+((z.z||1.55)-1)*(WHIP[k]+(WHIP[k+1]-WHIP[k])*(u-k))}
-    else if(ty==='hold')v=z.z||1.15;else{const p=Math.min(1,Math.max(0,(t-z.a)/Math.max(0.2,z.b-z.a)));v=1+((z.z||1.064)-1)*Math.pow(1-p,1.5)}}return b*v*f}
+    else if(ty==='hold')v=z.z||1.15;else{const p=Math.min(1,Math.max(0,(t-z.a)/Math.max(0.2,z.b-z.a)));v=1+((z.z||1.064)-1)*Math.pow(1-p,1.5)}}
+  // while an accent word shows, the framing eases back to wide so the word behind her head stays readable (same as glorious.py)
+  const cl=u=>Math.min(1,Math.max(0,u));let w=0;for(const x of (S.proj.accents||[]))w+=cl((t-x.a)/0.22)*(1-cl((t-x.b-0.35)/0.22));
+  return b*v*(1+(f-1)*(1-w))}
 function drawZoom(t){const v=zoomAt(t),an=S.proj.zoomAnchor||[0.5,0.5];
   if(v>1.0005){main.style.transformOrigin=`${an[0]*100}% ${an[1]*100}%`;main.style.transform=`scale(${v})`}else main.style.transform='';
   const fl=(S.proj.zooms||[]).some(z=>((z.type==='whip')||(z.type==='beatwhip'&&z.flash!==false)||(z.type==='beat'&&z.flash))&&t>=z.a&&t<z.a+0.066);$('#flash').style.display=fl?'block':'none'}
@@ -827,20 +852,23 @@ function drawTile(t){const b=$('#tileBox'),tl=(S.proj.tiles||[]).find(x=>t>=x.a&
 // per-viewer layout choices (panel width, thumbnail size, folded sections); the page works without them
 function pref(k,d){try{const v=localStorage.getItem('ve.'+k);return v===null?d:JSON.parse(v)}catch{return d}}
 function setPref(k,v){try{localStorage.setItem('ve.'+k,JSON.stringify(v))}catch{}}
-const HOOKDEF={enabled:false,text:'',a:0,b:2.5,y:0.22,size:0.34,style:'neg',color:'#FFFFFF',outlineOn:false,outline:0.004,outlineColor:'#000000',shadowOn:false,shadow:0.006,shadowBlur:0.008,shadowOpacity:0.5};
-// the size it really renders at: never wider than 94% of the frame (same rule as glorious.py hook_geom)
-function hookEm(h,sw){const lines=h.text.split('|').map(x=>x.trim()).filter(Boolean);let em=h.size*sw;if(!lines.length)return em;_mc.font=`${em}px 'cap-intertight-black'`;const wid=Math.max(...lines.map(x=>_mc.measureText(x).width*0.97));return em*Math.min(1,0.94*sw/wid)}
-const hook=()=>Object.assign({},HOOKDEF,S.proj.hook||{});
-const hkSizeTxt=h=>{const r=Math.round(h.size*1080),e=h.style==='card'?r:Math.round(hookEm(h,1080));return e<r?`${e} (max)`:String(r)};
-function seekHook(){const h=hook();if(main.currentTime<h.a||main.currentTime>h.b)seek(h.a+0.8);else drawHook(main.currentTime)}
-function drawHook(t){const el=$('#hookBox'),h=hook();hookDeco(null);if(!h.enabled||!h.text||t<h.a||t>h.b+(h.style==='card'?0:0.35)){el.style.display='none';return}
-  if(h.style==='card'){const sw=$('#stage').clientWidth,sh=$('#stage').clientHeight,s=sw/1080,k='card'+h.text+h.size+sw; // her text card, in front (same as glorious.py hook_card_png)
-    if(el._k!==k){el._k=k;el.innerHTML=h.text.split('|').map(x=>x.trim()).filter(Boolean).map(l=>escH(l).split('*').map((p,i)=>i%2?`<span style="font-family:'cap-instrument-i';font-size:1.39em;font-weight:normal">${p}</span>`:p).join('')).join('<br>')}
-    const fi=h.a>0.01?Math.min(1,(t-h.a)/0.25):1,fo=Math.max(0,Math.min(1,(h.b-t)/0.25));el.className='';
-    Object.assign(el.style,{display:'block',left:52*s+'px',top:h.y*sh+'px',transform:'none',textAlign:'left',fontFamily:"'cap-montserrat-xb'",fontSize:h.size*sw+'px',
-      letterSpacing:'0',lineHeight:'1.62',color:'#6E1A2E',background:'rgba(250,243,235,.95)',borderLeft:8*s+'px solid #C9A05A',padding:`${26*s}px ${28*s}px ${26*s}px ${28*s}px`,
-      boxShadow:`0 ${10*s}px ${36*s}px rgba(0,0,0,.27)`,opacity:String(fi*fo)});return}
-  Object.assign(el.style,{left:'',textAlign:'',fontFamily:'',lineHeight:'',background:'',borderLeft:'',padding:'',boxShadow:''});
+/* Hook text and accent words (2026-11-10). Hook text = her hook sentence in a dark box, in front of her, for the first
+   seconds (project.hookText: the options Claude wrote, the chosen text, timing and look). Accent words = the big words
+   behind her head at big moments (project.accents [{text,a,b}], one shared look in project.accentStyle). An older
+   project's single "hook" word becomes one accent (same as glorious.py legacy_hook). */
+const ACCDEF={y:0.22,size:0.34,style:'neg',color:'#FFFFFF',outlineOn:false,outline:0.004,outlineColor:'#000000',shadowOn:false,shadow:0.006,shadowBlur:0.008,shadowOpacity:0.5};
+const HBDEF={enabled:false,text:'',options:[],a:0,b:6,style:'serif',size:0.07,y:0.56,box:0.74};
+function legacyHook(P){const hk=P.hook;if(!hk){if(!P.accents)P.accents=[];return}
+  if(!P.accents){const on=hk.enabled&&hk.text;
+    if(hk.style==='card'){P.accents=[];if(on&&!P.hookText)P.hookText=Object.assign({},HBDEF,{enabled:true,text:hk.text,a:hk.a,b:hk.b,style:'card',y:hk.y??0.6,size:hk.size??0.052})}
+    else{P.accents=on?[{text:hk.text,a:hk.a,b:hk.b}]:[];const st={};for(const [k,v] of Object.entries(hk))if(!['enabled','text','a','b'].includes(k))st[k]=v;P.accentStyle=st}}
+  delete P.hook}
+const accStyle=()=>Object.assign({},ACCDEF,S.proj.accentStyle||{});
+const accentAt=t=>{const x=(S.proj.accents||[]).find(x=>x.text&&t>=x.a&&t<=x.b+0.35);return x?Object.assign(accStyle(),x):null};
+const hbox=()=>Object.assign({},HBDEF,(S.proj&&S.proj.hookText)||{});
+// the size an accent really renders at: never wider than 94% of the frame (same rule as glorious.py hook_geom)
+function hookEm(h,sw){const lines=(h.text||'').split('|').map(x=>x.trim()).filter(Boolean);let em=h.size*sw;if(!lines.length)return em;_mc.font=`${em}px 'cap-intertight-black'`;const wid=Math.max(...lines.map(x=>_mc.measureText(x).width*0.97));return em*Math.min(1,0.94*sw/wid)}
+function drawHook(t){const el=$('#hookBox'),h=S.proj?accentAt(t):null;hookDeco(null);if(!h){el.style.display='none';return}
   const sw=$('#stage').clientWidth,sh=$('#stage').clientHeight,lines=h.text.split('|').map(x=>x.trim()).filter(Boolean);
   const em=hookEm(h,sw);
   const k=el.dataset.k=h.text+em;if(el._k!==k){el._k=k;el.innerHTML=lines.map(escH).join('<br>')}
@@ -849,6 +877,47 @@ function drawHook(t){const el=$('#hookBox'),h=hook();hookDeco(null);if(!h.enable
   const geo={fontSize:em+'px',letterSpacing:'-0.03em',opacity:String(fi*fo),top:(h.y*sh)+'px',transform:`translate(-50%,-50%) translateY(${0.045*sh*(1-e)}px) scale(${0.96+0.04*e})`};
   Object.assign(el.style,{display:'block'},geo);
   if(h.outlineOn||h.shadowOn)hookDeco(h,em,lines,fi*fo)}
+/* hook text box: same layout rules as glorious.py hookbox_png (balanced lines, *accent*, | breaks, stepped or single box) */
+const HBST={serif:['dmserif','dmserif-italic',1.12,'250,240,226','240,178,176','38,28,24',1.18,0.36,0.2,0.26],
+            sans:['poppins-sb','poppins-sb',1.0,'244,244,244','240,178,176','22,22,22',1.32,0.5,0.32,0.32]};
+const isEmo=ch=>{const o=ch.codePointAt(0);return o>=0x1F000||(o>=0x2600&&o<0x27C0)||o===0xFE0F||o===0x200D};
+const emoN=t=>[...t].filter(c=>c!=='️'&&c!=='‍').length;
+function hbRuns(w){const out=[];let buf='',emo=null;for(const ch of w){const e=isEmo(ch);if(buf&&e!==emo){out.push([buf,emo]);buf=''}buf+=ch;emo=e}if(buf)out.push([buf,emo]);return out}
+function hbWords(text){return text.trim().split(/\s*\|\s*/).map(ln=>{const ws=[];ln.split('*').forEach((p,k)=>p.split(/\s+/).filter(Boolean).forEach(w=>ws.push([w,k%2===1])));return ws}).filter(x=>x.length)}
+function hbLayout(h,W){const st=HBST[h.style]||HBST.serif;let em=h.size*W,L;
+  for(let it=0;it<14;it++){const reg=`${Math.round(em)}px 'cap-${st[0]}'`,ita=`${Math.round(em*st[2])}px 'cap-${st[1]}'`;
+    const ml=(t,f)=>{_mc.font=f;return _mc.measureText(t).width},E=em;
+    const wl=(w,acc)=>hbRuns(w).reduce((n,[t,e])=>n+(e?emoN(t)*E*1.08:ml(t,acc?ita:reg)),0);
+    const sp=ml(' ',reg),padx=st[7]*em,maxw=0.86*W-2*padx,lines=[];
+    for(const ws of hbWords(h.text)){const Lw=ws.map(([w,a])=>wl(w,a));
+      const greedy=lim=>{const rows=[[]];let cw=0;Lw.forEach((l,i)=>{if(rows.at(-1).length&&cw+sp+l>lim){rows.push([]);cw=0}cw+=(rows.at(-1).length?sp:0)+l;rows.at(-1).push(i)});return rows};
+      const n=greedy(maxw).length;let lo=Math.max(...Lw),hi=maxw;for(let k=0;k<24;k++){const m=(lo+hi)/2;if(greedy(m).length<=n)hi=m;else lo=m}
+      for(const r of greedy(hi))lines.push(r.map(i=>ws[i]))}
+    const lw=lines.map(ln=>ln.reduce((n,[w,a])=>n+wl(w,a),0)+sp*(ln.length-1));
+    L={em,lines,lw,reg,ita,sp,st,wl,padx};if(!lines.length||Math.max(...lw)<=maxw+0.5)break;em*=0.94}
+  return L}
+function drawHookText(t){const cv=$('#hbCanvas'),st=$('#stage'),dpr=window.devicePixelRatio||1,W=st.clientWidth,H=st.clientHeight,hit=$('#hbHit');
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  const g=cv.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,cv.width,cv.height);
+  const h=hbox();if(!S.proj||!h.enabled||!h.text.trim()||t<h.a||t>h.b){hit.style.display='none';return}
+  const op=(h.a>0.01?Math.min(1,(t-h.a)/0.25):1)*Math.max(0,Math.min(1,(h.b-t)/0.3));
+  const L=hbLayout(h,W),s=L.st,em=L.em,lh=s[6]*em,pady=s[8]*em,padx=L.padx,r=s[9]*em,n=L.lines.length;if(!n){hit.style.display='none';return}
+  _mc.font=L.reg;const m=_mc.measureText('Hg'),A=m.fontBoundingBoxAscent,D=m.fontBoundingBoxDescent;
+  let top=h.y*H-(n*lh+2*pady)/2;top=Math.max(0.05*H,Math.min(top,0.9*H-n*lh-2*pady));
+  g.setTransform(dpr,0,0,dpr,0,0);const path=new Path2D();
+  if(h.style==='sans'){const mw=Math.max(...L.lw);path.roundRect(W/2-mw/2-padx,top,mw+2*padx,n*lh+2*pady,r)}
+  else{const rows=L.lw.map((l,i)=>[W/2-l/2-padx,top+pady+i*lh-(i===0?pady:0),W/2+l/2+padx,top+pady+(i+1)*lh+(i===n-1?pady:0)]);
+    for(const [x0,y0,x1,y1] of rows)path.roundRect(x0,y0,x1-x0,y1-y0,r);
+    rows.slice(1).forEach((b,i)=>{const a=rows[i];path.rect(Math.max(a[0],b[0]),a[3]-r,Math.min(a[2],b[2])-Math.max(a[0],b[0]),b[1]+r-(a[3]-r))})}
+  g.globalAlpha=h.box*op;g.fillStyle=`rgb(${s[5]})`;g.fill(path,'nonzero');   // one fill, so overlapping pieces don't get darker
+  g.globalAlpha=op;g.textBaseline='alphabetic';g.textAlign='left';g.shadowColor='rgba(0,0,0,.35)';g.shadowBlur=6*W/1080*dpr;g.shadowOffsetY=2*W/1080*dpr;
+  L.lines.forEach((ln,i)=>{let x=W/2-L.lw[i]/2;const base=top+pady+i*lh+(lh-(A+D))/2+A;
+    for(const [w,acc] of ln){for(const [t_,e] of hbRuns(w)){
+        if(e){const k=emoN(t_),cell=k*em*1.08;g.font=`${em*0.98}px 'Apple Color Emoji'`;g.fillStyle='#000';const mw=g.measureText(t_).width;g.fillText(t_,x+(cell-mw)/2,base);x+=cell}
+        else{g.font=acc?L.ita:L.reg;g.fillStyle=`rgb(${acc?s[4]:s[3]})`;g.fillText(t_,x,base);x+=g.measureText(t_).width}}
+      g.font=L.reg;x+=L.sp}});
+  g.shadowColor='transparent';g.globalAlpha=1;
+  const mw=Math.max(...L.lw)+2*padx;Object.assign(hit.style,{display:'block',left:(W/2-mw/2)+'px',top:top+'px',width:mw+'px',height:(n*lh+2*pady)+'px'})}
 // outline + drop shadow of the hook word, drawn on a canvas above it with the letters cut out, so the word itself shows
 // exactly as rendered (glorious.py draws them under the word fill; in the render they sit behind you too)
 function hookDeco(h,em,lines,op){const cv=$('#hookDeco'),st=$('#stage'),dpr=window.devicePixelRatio||1,W=st.clientWidth,H=st.clientHeight;
@@ -907,14 +976,14 @@ function drawCaption(t){
 }
 function capChanged(full){S.capCache=null;lastChunk=null;$('#capBox').dataset.key='';applyCapStyle();drawCaption(main.currentTime);S.dirty=true;setStatus();
   if(full){if(S.tab==='cap')renderCapPanel();renderTimeline()}}
-new ResizeObserver(()=>{if(S.proj){applyCapStyle();$('#capBox').dataset.key='';drawCaption(main.currentTime)}}).observe($('#stage'));
-$('#hookBox').onpointerdown=e=>{
-  if(!S.proj)return;e.preventDefault();e.stopPropagation();const el=e.currentTarget,st=$('#stage').getBoundingClientRect(),o={y:hook().y,cy:e.clientY};
-  el.setPointerCapture(e.pointerId);beginEdit();if(!S.proj.hook)S.proj.hook=hook();
-  el.onpointermove=ev=>{S.proj.hook.y=Math.round(Math.max(.04,Math.min(.9,o.y+(ev.clientY-o.cy)/st.height))*1000)/1000;S.dirty=true;drawHook(main.currentTime);
-    const r=$('#hkY');if(r){r.value=S.proj.hook.y;$('#hkYO').textContent=Math.round(S.proj.hook.y*100)+'%'}};
-  el.onpointerup=()=>{el.onpointermove=el.onpointerup=null;endEdit();setStatus()};
-};
+new ResizeObserver(()=>{if(S.proj){applyCapStyle();$('#capBox').dataset.key='';drawCaption(main.currentTime);drawHookText(main.currentTime)}}).observe($('#stage'));
+function dragY(e,get,set,redraw){ // drag a hook / accent layer up or down on the preview
+  if(!S.proj)return;e.preventDefault();e.stopPropagation();const el=e.currentTarget,st=$('#stage').getBoundingClientRect(),o={y:get(),cy:e.clientY};
+  el.setPointerCapture(e.pointerId);beginEdit();
+  el.onpointermove=ev=>{set(Math.round(Math.max(.04,Math.min(.92,o.y+(ev.clientY-o.cy)/st.height))*1000)/1000);S.dirty=true;redraw()};
+  el.onpointerup=()=>{el.onpointermove=el.onpointerup=null;endEdit();setStatus();if(S.tab==='hook')renderHookPanel()}}
+$('#hookBox').onpointerdown=e=>dragY(e,()=>accStyle().y,v=>{S.proj.accentStyle=Object.assign({},S.proj.accentStyle,{y:v})},()=>drawHook(main.currentTime));
+$('#hbHit').onpointerdown=e=>dragY(e,()=>hbox().y,v=>{S.proj.hookText=Object.assign(hbox(),{y:v})},()=>drawHookText(main.currentTime));
 $('#capBox').onpointerdown=e=>{
   if(!S.proj)return;e.preventDefault();const box=e.currentTarget,st=$('#stage').getBoundingClientRect(),c=cfg();
   const o={x:c.x,y:c.y,cx:e.clientX,cy:e.clientY};box.setPointerCapture(e.pointerId);beginEdit();
@@ -944,19 +1013,6 @@ function renderCapPanel(){
   P.innerHTML=`${we}
     <label class="bigtog"><input type="checkbox" data-k="enabled"${c.enabled?' checked':''}> Burn captions into the video</label>
     <div class="muted small" style="margin:6px 2px 0">What you see on the preview is what Claude renders. Drag the caption on the preview to move it. Double-click a word in the timeline to fix a typo.</div>
-    <h4>Hook word (behind you)</h4>
-    ${(()=>{const h=hook();return `<label class="bigtog"><input type="checkbox" id="hkOn"${h.enabled?' checked':''}> Show a big hook word at the start</label>
-    <div class="ctl"><label>Word</label><input id="hkText" value="${escH(h.text)}" placeholder="e.g. Breadcrumbed?  or  Bread|crumbing" style="flex:1"></div>
-    <div class="ctl"><label>Shows</label><input type="number" id="hkA" step="0.1" min="0" value="${h.a}" style="width:70px"><span class="muted small">to</span><input type="number" id="hkB" step="0.1" min="0" value="${h.b}" style="width:70px"><span class="muted small">s</span><button id="hkSent">Until first sentence ends</button></div>
-    <div class="ctl"><label>Size</label><input type="range" id="hkSize" min="0.03" max="0.55" step="0.005" value="${h.size}"><span class="out" id="hkSizeO">${hkSizeTxt(h)}</span></div>
-    <div class="ctl"><label>Height</label><input type="range" id="hkY" min="0.04" max="0.9" step="0.005" value="${h.y}"><span class="out" id="hkYO">${Math.round(h.y*100)}%</span></div>
-    <div class="muted small" id="hkFit"${h.style!=='card'&&hookEm(h,1080)<h.size*1080-0.5?'':' style="display:none"'}>At this size the word fills the width, so making it bigger has no effect. Shorter lines (use |) can go bigger.</div>
-    <div class="ctl"><label>Look</label><select id="hkStyle"><option value="neg"${h.style==='neg'?' selected':''}>Negative (inverted picture)</option><option value="white"${h.style==='white'?' selected':''}>White</option><option value="color"${h.style==='color'?' selected':''}>Color</option><option value="card"${h.style==='card'?' selected':''}>Text card (in front)</option></select><input type="color" id="hkColor" value="${h.color}"${h.style==='color'?'':' disabled'}></div>
-    ${h.style==='card'?'':`<div class="ctl"><label class="tog" style="width:92px"><input type="checkbox" id="hkOlOn"${h.outlineOn?' checked':''}> Outline</label><input type="range" id="hkOl" min="0.001" max="0.02" step="0.0005" value="${h.outline}"><span class="out" id="hkOlO">${Math.round(h.outline*1080)}</span><input type="color" id="hkOlC" value="${h.outlineColor}"></div>
-    <div class="ctl"><label class="tog" style="width:92px"><input type="checkbox" id="hkShOn"${h.shadowOn?' checked':''}> Shadow</label><input type="range" id="hkSh" min="0" max="0.03" step="0.0005" value="${h.shadow}"><span class="out" id="hkShO">${Math.round(h.shadow*1080)}</span></div>
-    <div class="ctl"><label>Shadow blur</label><input type="range" id="hkShB" min="0" max="0.03" step="0.0005" value="${h.shadowBlur}"><span class="out" id="hkShBO">${Math.round(h.shadowBlur*1080)}</span></div>
-    <div class="ctl"><label>Shadow dark</label><input type="range" id="hkShD" min="0" max="1" step="0.05" value="${h.shadowOpacity}"><span class="out" id="hkShDO">${Math.round(h.shadowOpacity*100)}%</span></div>`}
-    <div class="muted small">Drag the word on the preview to move it up or down. Text card: *stars* make serif accent words, emoji work, Height = top of the card, Size = text size. Use | for a line break. It rises in from below and fades out at the end. In the render it sits <b>behind you</b> (your head and hair stay in front); the preview here draws it on top.</div>`})()}
     <h4>Style presets</h4>
     <div class="presets">${PRESETS.map(p=>{const f=S.fontMap[p.s.font]||{};const s=effPreset(p);
       const st=`font-family:'cap-${s.font}';color:${s.color};${s.box?`background:${s.boxColor};padding:2px 6px;`:''}${s.outline?`-webkit-text-stroke:${Math.max(1,s.outline*400)}px ${s.outlineColor};`:''}font-size:${Math.min(20,s.size*230)}px;line-height:1.1`;
@@ -1018,20 +1074,6 @@ ${c.engine==='glorious'?`    <h4>Glorious</h4>
     el.addEventListener('change',()=>{endEdit();if(el.type!=='range'&&el.type!=='color'&&el.type!=='number')capChanged(true);else capChanged(false)});
   });
   const act=(fn)=>{beginEdit();fn();endEdit();$('#capTog').checked=c.enabled;capChanged(true)};
-  const hset=(k,v,full)=>{if(!S.proj.hook)S.proj.hook=hook();S.proj.hook[k]=v;S.dirty=true;setStatus();drawHook(main.currentTime);if(full)renderCapPanel()};
-  $('#hkOn').onchange=e=>{pushUndo();hset('enabled',e.target.checked,true);if(e.target.checked){if(!hook().text)hset('text','Breadcrumbed?');seek(hook().a+0.7)}};
-  $('#hkText').onfocus=beginEdit;$('#hkText').oninput=e=>hset('text',e.target.value);$('#hkText').onchange=()=>endEdit();
-  $('#hkA').onchange=e=>{pushUndo();hset('a',r2(+e.target.value));seek(hook().a+0.7)};
-  $('#hkB').onchange=e=>{pushUndo();hset('b',r2(+e.target.value))};
-  $('#hkSent').onclick=()=>{pushUndo();const W=S.proj.words,i=W.findIndex(w=>w.s>=hook().a&&/[.!?]$/.test(w.w));if(i>=0)hset('b',r2(W[i].e+0.2),true)};
-  for(const [id,k] of [['hkOlOn','outlineOn'],['hkShOn','shadowOn']]){const el=$('#'+id);if(el)el.onchange=e=>{pushUndo();hset(k,e.target.checked);seekHook()}}
-  if($('#hkOlC'))$('#hkOlC').oninput=e=>{hset('outlineColor',e.target.value);seekHook()};
-  const px=v=>Math.round(v*1080);
-  for(const [id,k,o,f,on] of [['hkSize','size','hkSizeO',()=>hkSizeTxt(hook())],['hkY','y','hkYO',v=>Math.round(v*100)+'%'],['hkOl','outline','hkOlO',px,'outlineOn'],['hkSh','shadow','hkShO',px,'shadowOn'],['hkShB','shadowBlur','hkShBO',px,'shadowOn'],['hkShD','shadowOpacity','hkShDO',v=>Math.round(v*100)+'%','shadowOn']]){const el=$('#'+id);if(!el)continue;
-    el.addEventListener('input',()=>{if(on&&!hook()[on]){hset(on,true);$('#'+(on==='outlineOn'?'hkOlOn':'hkShOn')).checked=true}if(id==='hkSize'){const h=hook();h.size=+el.value;$('#hkFit').style.display=h.style!=='card'&&hookEm(h,1080)<h.size*1080-0.5?'':'none'}});
-    el.onpointerdown=beginEdit;el.oninput=()=>{hset(k,+el.value);$('#'+o).textContent=f(+el.value);if(main.currentTime<hook().a||main.currentTime>hook().b)seek(hook().a+0.8)};el.onchange=()=>endEdit()}
-  $('#hkStyle').onchange=e=>{pushUndo();const v=e.target.value,was=hook().style;if(v==='card'&&was!=='card'){hset('size',0.052);hset('y',0.6)}else if(v!=='card'&&was==='card'){hset('size',0.34);hset('y',0.22)}hset('style',v,true)};
-  $('#hkColor').oninput=e=>hset('color',e.target.value);
   const gfmt=(k,v)=>k==='gPad'||k==='gShadowOpacity'||k==='gLine'?Math.round(v*100)+'%':Math.round(v*1080);
   P.querySelectorAll('[data-gs]').forEach(el=>{el.onpointerdown=beginEdit;el.oninput=()=>{c.gSizes=Object.assign({},c.gSizes||{});c.gSizes[el.dataset.gs]=+el.value;P.querySelector(`[data-gso="${el.dataset.gs}"]`).textContent=Math.round(el.value*1080);capChanged(false)};el.onchange=()=>{endEdit();capChanged(false)}});
   P.querySelectorAll('[data-g]').forEach(el=>{el.onpointerdown=beginEdit;el.oninput=()=>{c[el.dataset.g]=+el.value;P.querySelector(`[data-go="${el.dataset.g}"]`).textContent=gfmt(el.dataset.g,+el.value);capChanged(false)};el.onchange=()=>{endEdit();capChanged(false)}});
@@ -1058,6 +1100,73 @@ ${c.engine==='glorious'?`    <h4>Glorious</h4>
     $('#weEmph').onchange=e=>act(()=>{if(e.target.value)w.emph=e.target.value;else delete w.emph});
     $('#weDone').onclick=()=>{S.wordSel=-1;renderCapPanel();renderTimeline()};
     seekIfOutside(w.s);}
+}
+/* ---------- Hook tab: the hook text (Claude's options or her own) and the accent words ---------- */
+function renderHookPanel(){
+  const P=$('#paneHook');if(!S.proj){P.innerHTML='';return}
+  const h=hbox(),A=S.proj.accents||[],ac=accStyle(),opts=(h.options||[]).map(o=>typeof o==='string'?{text:o}:o);
+  const px=v=>Math.round(v*1080),pc=v=>Math.round(v*100)+'%',sel=(v,cur)=>v===cur?' selected':'';
+  const rng=(id,label,min,max,step,val,out)=>`<div class="ctl"><label>${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="out" id="${id}O">${out}</span></div>`;
+  const own=!opts.some(o=>o.text===h.text);
+  P.innerHTML=`<h4>Hook text (first seconds)</h4>
+    <label class="bigtog"><input type="checkbox" id="hbOn"${h.enabled?' checked':''}> Show the hook text</label>
+    ${opts.length?`<div class="muted small" style="margin:10px 2px 0">Claude’s options. Click one to use it:</div>`+opts.map((o,i)=>`<label class="hopt${o.text===h.text?' on':''}"><input type="radio" name="hopt" data-o="${i}"${o.text===h.text?' checked':''}><span>${escH(o.text.replace(/[*|]/g,' ').replace(/\s+/g,' '))}${o.why?`<span class="why">${escH(o.why)}</span>`:''}</span></label>`).join(''):''}
+    <div class="muted small" style="margin:10px 2px 4px">${opts.length&&own?'Your own text':'Text'} (edit freely):</div>
+    <textarea id="hbText" placeholder="Your hook sentence">${escH(h.text)}</textarea>
+    <div class="muted small">*stars* = blush italic accent · | = line break · emoji work</div>
+    <div class="ctl"><label>Look</label><select id="hbStyle"><option value="serif"${sel('serif',h.style)}>Serif box (thumbnail look)</option><option value="sans"${sel('sans',h.style)}>Clean sans box</option>${h.style==='card'?'<option value="card" selected>Cream card (old, no preview)</option>':''}</select></div>
+    ${rng('hbSize','Text size',0.04,0.11,0.001,h.size,px(h.size))}
+    ${rng('hbBox','Box opacity',0,1,0.02,h.box,pc(h.box))}
+    ${rng('hbY','Height',0.1,0.88,0.005,h.y,pc(h.y))}
+    <div class="ctl"><label>Shows</label><input type="number" id="hbA" step="0.1" min="0" value="${h.a}" style="width:70px"><span class="muted small">to</span><input type="number" id="hbB" step="0.1" min="0" value="${h.b}" style="width:70px"><span class="muted small">s (${(h.b-h.a).toFixed(1)}s)</span></div>
+    <div class="ctl"><label>Until the end of</label><button data-sn="1">1st sentence</button><button data-sn="2">2nd</button><button data-sn="3">3rd</button></div>
+    <div class="muted small">Drag the box on the preview to move it. It sits in front of you and fades out at its end time. Keep it above the captions and away from the bottom, where Instagram puts your name and caption.</div>
+    <h4>Accent words (big, behind you)</h4>
+    <div id="acList">${A.map((x,i)=>`<div class="zl"><span class="t" data-as="${i}">${fmt(x.a)}</span><input type="text" data-at="${i}" value="${escH(x.text)}"><input type="number" step="0.05" data-aa="${i}" value="${x.a}" title="Starts at"><input type="number" step="0.05" data-ab="${i}" value="${x.b}" title="Ends at"><button data-ax="${i}" title="Remove">×</button></div>`).join('')||'<div class="muted small">No accent words yet.</div>'}</div>
+    <div class="row"><button id="acAdd">+ Accent word at playhead</button></div>
+    <div class="muted small">Type the word (| stacks it on two lines) and set when it shows. It rises in behind your head and fades out at its end time. Best on punchlines and big lines where your face is on screen (not under B-roll). The preview draws it on top of you; the render puts it behind you.</div>
+    <h4>Accent look (all of them)</h4>
+    ${rng('acSize','Size',0.08,0.55,0.005,ac.size,px(ac.size))}
+    ${rng('acY','Height',0.04,0.9,0.005,ac.y,pc(ac.y))}
+    <div class="ctl"><label>Look</label><select id="acStyle"><option value="neg"${sel('neg',ac.style)}>Negative (inverted picture)</option><option value="white"${sel('white',ac.style)}>White</option><option value="color"${sel('color',ac.style)}>Color</option></select><input type="color" id="acColor" value="${ac.color}"${ac.style==='color'?'':' disabled'}></div>
+    <div class="ctl"><label class="tog" style="width:92px"><input type="checkbox" id="acOlOn"${ac.outlineOn?' checked':''}> Outline</label><input type="range" id="acOl" min="0.001" max="0.02" step="0.0005" value="${ac.outline}"><span class="out" id="acOlO">${px(ac.outline)}</span><input type="color" id="acOlC" value="${ac.outlineColor}"></div>
+    <div class="ctl"><label class="tog" style="width:92px"><input type="checkbox" id="acShOn"${ac.shadowOn?' checked':''}> Shadow</label><input type="range" id="acSh" min="0" max="0.03" step="0.0005" value="${ac.shadow}"><span class="out" id="acShO">${px(ac.shadow)}</span></div>
+    ${rng('acShB','Shadow blur',0,0.03,0.0005,ac.shadowBlur,px(ac.shadowBlur))}
+    ${rng('acShD','Shadow dark',0,1,0.05,ac.shadowOpacity,pc(ac.shadowOpacity))}
+    <div class="muted small">Drag an accent word on the preview to move them all up or down.</div>`;
+  const t=()=>main.currentTime;
+  const showHB=()=>{const h=hbox();if(t()<h.a||t()>h.b)seek(h.a+Math.min(1,(h.b-h.a)/2));else drawHookText(t())};
+  const hbset=(k,v,full)=>{S.proj.hookText=Object.assign(hbox(),{[k]:v});S.dirty=true;setStatus();drawHookText(t());if(full){renderTimeline();renderHookPanel();showHB()}};
+  const acset=(k,v)=>{S.proj.accentStyle=Object.assign({},S.proj.accentStyle,{[k]:v});S.dirty=true;setStatus();const A=S.proj.accents||[];if(A.length&&!accentAt(t()))seek(A[0].a+0.8);else drawHook(t())};
+  $('#hbOn').onchange=e=>{pushUndo();if(e.target.checked&&!hbox().text.trim()&&opts[0])hbset('text',opts[0].text);hbset('enabled',e.target.checked,true)};
+  P.querySelectorAll('[data-o]').forEach(el=>el.onchange=()=>{pushUndo();hbset('enabled',true);hbset('text',opts[+el.dataset.o].text,true)});
+  $('#hbText').onfocus=beginEdit;$('#hbText').oninput=e=>{hbset('text',e.target.value);showHB()};$('#hbText').onchange=()=>{endEdit();renderTimeline();renderHookPanel()};
+  $('#hbStyle').onchange=e=>{pushUndo();hbset('style',e.target.value,true)};
+  for(const [id,k,f] of [['hbSize','size',px],['hbBox','box',pc],['hbY','y',pc]]){const el=$('#'+id);
+    el.onpointerdown=beginEdit;el.oninput=()=>{hbset(k,+el.value);$('#'+id+'O').textContent=f(+el.value);showHB()};el.onchange=()=>endEdit()}
+  $('#hbA').onchange=e=>{pushUndo();hbset('a',r2(Math.max(0,+e.target.value)),true)};
+  $('#hbB').onchange=e=>{pushUndo();hbset('b',r2(+e.target.value),true)};
+  P.querySelectorAll('[data-sn]').forEach(b=>b.onclick=()=>{const W=S.proj.words,ends=W.filter(w=>w.s>=hbox().a&&/[.!?]["”]?$/.test(w.w)),w=ends[+b.dataset.sn-1];
+    if(!w){toast('There aren’t that many sentences.');return}pushUndo();hbset('b',r2(w.e+0.25),true);seek(Math.max(hbox().a,w.e-0.5))});
+  const aed=fn=>{pushUndo();fn();S.proj.accents.sort((a,b)=>a.a-b.a);S.dirty=true;setStatus();renderTimeline();renderHookPanel();renderInspector();sync()};
+  P.querySelectorAll('[data-as]').forEach(e=>e.onclick=()=>seek(A[+e.dataset.as].a+0.8));
+  P.querySelectorAll('[data-at]').forEach(e=>e.onchange=()=>aed(()=>{A[+e.dataset.at].text=e.value.trim()||'Word'}));
+  P.querySelectorAll('[data-aa]').forEach(e=>e.onchange=()=>aed(()=>{const x=A[+e.dataset.aa];x.a=r2(Math.max(0,Math.min(+e.value,x.b-0.4)))}));
+  P.querySelectorAll('[data-ab]').forEach(e=>e.onchange=()=>aed(()=>{const x=A[+e.dataset.ab];x.b=r2(Math.min(dur(),Math.max(+e.value,x.a+0.4)))}));
+  P.querySelectorAll('[data-ax]').forEach(e=>e.onclick=()=>aed(()=>{A.splice(+e.dataset.ax,1)}));
+  $('#acAdd').onclick=()=>{const T=t(),W=S.proj.words,w=W.find(w=>w.e>=T-0.02)||W.at(-1);
+    const a=r2(Math.max(0,w?Math.min(T,w.s-0.1):T)),txt=w?w.w.replace(/[.,!?;:"“”]+$/,''):'Word';
+    if(A.some(x=>a<x.b+0.3&&x.a<a+1.8)){toast('There’s already an accent word here.');return}
+    aed(()=>{S.proj.accents=A;A.push({text:txt.charAt(0).toUpperCase()+txt.slice(1),a,b:r2(Math.min(dur(),a+1.8))})});seek(a+0.8);
+    setTimeout(()=>{const i=S.proj.accents.findIndex(x=>x.a===a),el=P.querySelector(`[data-at="${i}"]`);if(el){el.focus();el.select()}},0)};
+  for(const [id,k,f] of [['acSize','size',px],['acY','y',pc],['acOl','outline',px],['acSh','shadow',px],['acShB','shadowBlur',px],['acShD','shadowOpacity',pc]]){const el=$('#'+id);
+    el.onpointerdown=beginEdit;el.oninput=()=>{acset(k,+el.value);$('#'+id+'O').textContent=f(+el.value);
+      if(['outline'].includes(k)&&!accStyle().outlineOn){acset('outlineOn',true);$('#acOlOn').checked=true}
+      if(['shadow','shadowBlur','shadowOpacity'].includes(k)&&!accStyle().shadowOn){acset('shadowOn',true);$('#acShOn').checked=true}};el.onchange=()=>endEdit()}
+  for(const [id,k] of [['acOlOn','outlineOn'],['acShOn','shadowOn']])$('#'+id).onchange=e=>{pushUndo();acset(k,e.target.checked)};
+  $('#acOlC').oninput=e=>{acset('outlineColor',e.target.value)};$('#acOlC').onpointerdown=beginEdit;$('#acOlC').onchange=()=>endEdit();
+  $('#acStyle').onchange=e=>{pushUndo();acset('style',e.target.value);renderHookPanel()};
+  $('#acColor').oninput=e=>acset('color',e.target.value);$('#acColor').onpointerdown=beginEdit;$('#acColor').onchange=()=>endEdit();
 }
 function seekIfOutside(t){if(Math.abs(main.currentTime-t)>0.3)seek(t+0.02)}
 
@@ -1121,7 +1230,8 @@ function remapVisuals(old,nw){const oo=koffs(old),on=koffs(nw),P=S.proj;
       if(!(oka&&okb)&&key==='slots')flags.push(`check ${it.clip}: an edge was on a cut`);
       out.push(Object.assign({},it,{a:r3(a),b:r3(b)}))}
     P[key]=out}
-  if(P.hook){P.hook.a=r3(mp(P.hook.a)[0]);P.hook.b=r3(mp(P.hook.b)[0])}
+  if(P.hookText){P.hookText.a=r3(mp(P.hookText.a)[0]);P.hookText.b=r3(mp(P.hookText.b)[0])}
+  P.accents=(P.accents||[]).map(x=>Object.assign({},x,{a:r3(mp(x.a)[0]),b:r3(mp(x.b)[0])})).filter(x=>{if(x.b-x.a<0.15){flags.push(`accent “${x.text}” was on cut material and was removed`);return false}return true});
   if(P.whipAt)P.whipAt=P.whipAt.map(t=>r3(mp(t)[0]));
   P.duration=r3(on.at(-1));
   const q=a=>a.length>4?a.slice(0,4).join(' ')+'…':a.join(' ');

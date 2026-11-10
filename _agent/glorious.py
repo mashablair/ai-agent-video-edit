@@ -4,12 +4,16 @@ Captions: Inter Tight Bold #FCFCFC, no outline/shadow/box, centered, <=2 lines, 
  in from the left as spoken, lead word supersized. Per-word keyword styles (word["emph"]): neg (Inter Tight Bold Italic in
  NEGATIVE mode: the letters show the inverted picture), serif (Instrument Serif Italic), script (yellow brush script),
  yellow (mustard Inter Tight Bold), num (accent Inter Tight Bold for prices, years and percents; see "numbers").
+Hook text (project "hookText"): her hook sentence in a dark box in front of her for the first seconds (hookbox_png).
+Accent words (project "accents" + "accentStyle"): huge Inter Tight Black words behind her head (person cut-out on top) at
+ big moments through the video. An old project's single "hook" word is read as one accent (legacy_hook).
 Visuals: B-roll slots with a slow push-in; slot options "headline" ("there" or "hot|COLD") and "reveal" (framed photo on a
  blurred copy that grows to full screen); project "zooms" [{a,b,z}] punch-ins on her face; project "tiles" [{a,b,num,text}].
 Usage:  glorious.py numbers PROJECT.json [--dry]  -> spoken prices/years/percents become digits ("$9.5 million.") in the num style
         glorious.py plan PROJECT.json            -> pages + chunk count
         glorious.py chunk PROJECT.json WD N      -> WD/glo_N.mp4 (video only)
         glorious.py assemble PROJECT.json WD OUT -> joins chunks + the source audio
+        glorious.py hookbox PROJECT.json OUT.png -> the hook text box alone (to check it by eye)
 Times are absolute; each chunk is rendered on an absolute timeline, so captions/B-roll can cross chunk edges."""
 import json, os, re, sys, subprocess, math
 from PIL import ImageFont
@@ -42,7 +46,7 @@ def probe(src):
     n,d=map(int,s["r_frame_rate"].split("/")); return w,h,round(n/d),float(o["format"]["duration"])
 
 def load(pp):
-    p=json.load(open(pp)); src=os.path.join(VID,p["video"]); W,H,fps,dur=probe(src); c=p.get("captions",{})
+    p=json.load(open(pp)); src=os.path.join(VID,p["video"]); W,H,fps,dur=probe(src); c=p.get("captions",{}); legacy_hook(p)
     words=[w for w in p["words"] if not w.get("hide") and w.get("w") and w["s"]>=c.get("start",0)-1e-6]
     return dict(p=p,src=src,W=W,H=H,fps=fps,dur=dur,words=words,broll=p.get("slots",[]),zooms=p.get("zooms",[]),
                 tiles=p.get("tiles",[]),cap_on=c.get("enabled",False) and c.get("engine")=="glorious",
@@ -52,6 +56,29 @@ def load(pp):
                 colors={"small":c.get("color","#FCFCFC"),"big":c.get("color","#FCFCFC"),"serif":c.get("color","#FCFCFC"),
                         "script":c.get("gScriptColor",YELLOW),"yellow":c.get("gYellowColor",MUSTARD),"num":c.get("gNumColor",NUMCOL)},outline=float(c.get("gOutline",0.003)) if c.get("gOutlineOn") else 0.0,outline_c=c.get("gOutlineColor","#000000"),
                 shadow=float(c.get("gShadow",0.003)),shadow_op=float(c.get("gShadowOpacity",0.5)),shadow_blur=float(c.get("gShadowBlur",0.006)))
+
+# Hook text and accent words (2026-11-10). The hook is a sentence in a box, in front of her, for the first seconds
+# (project "hookText"); the big words behind her head are accents through the video (project "accents" = [{text,a,b}],
+# one shared look in "accentStyle"). Projects from before keep working: their single "hook" word becomes one accent
+# (a hook in the old "card" style becomes the hook text).
+ACCDEF={"y":0.22,"size":0.34,"style":"neg","color":"#FFFFFF"}
+HBDEF={"enabled":False,"text":"","a":0.0,"b":6.0,"style":"serif","size":0.07,"y":0.56,"box":0.74}
+def legacy_hook(p):
+    hk=p.get("hook")
+    if not hk or "accents" in p: return
+    on=hk.get("enabled") and hk.get("text")
+    if hk.get("style")=="card":
+        p["accents"]=[]
+        if on and "hookText" not in p: p["hookText"]=dict(HBDEF,enabled=True,text=hk["text"],a=hk["a"],b=hk["b"],style="card",y=hk.get("y",0.6),size=hk.get("size",0.052))
+    else:
+        p["accents"]=[{"text":hk["text"],"a":hk["a"],"b":hk["b"]}] if on else []
+        p["accentStyle"]={k:v for k,v in hk.items() if k not in ("enabled","text","a","b")}
+def accents(S):
+    st=S["p"].get("accentStyle") or {}
+    return [dict(ACCDEF,**st,**a) for a in S["p"].get("accents",[]) if a.get("text")]
+def hook_text(S):
+    hb=dict(HBDEF,**(S["p"].get("hookText") or {}))
+    return hb if hb["enabled"] and hb["text"].strip() else None
 
 # Spoken numbers -> digits. Only amounts with a clear unit change; anything unsure is listed for a human to read.
 UNITS={n:i for i,n in enumerate("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split())}
@@ -297,19 +324,19 @@ def face_at(S,t):
         if len(fs): x,y,w,h=max(fs,key=lambda r:r[2]); pts.append(((x+w/2)/q,(y+h/2)/q))
     return [float(v) for v in np.median(np.array(pts),axis=0)] if pts else [S["W"]/2,S["H"]*0.4]
 
-def hook_geom(S,F):
-    """Size and position of the hook word (shared by the word mask and its outline/shadow)."""
-    W,H=S["W"],S["H"]; hk=S["p"]["hook"]; lines=[x for x in re.split(r"\s*\|\s*",hk["text"]) if x]
+def hook_geom(S,F,hk):
+    """Size and position of an accent word (shared by the word mask and its outline/shadow)."""
+    W,H=S["W"],S["H"]; lines=[x for x in re.split(r"\s*\|\s*",hk["text"]) if x]
     em=float(hk.get("size",0.34))*W; fnt=F.pil("black",em)
     wid=max(fnt.getlength(x)*(1-0.03) for x in lines); em*=min(1.0,0.94*W/wid)   # never wider than the frame
     return lines,em,float(hk.get("y",0.22))*H
 
-def hook_ass(S,F,deco=False):
-    """Big hook word: Inter Tight Black, tight tracking, rises from below ('sunrise') and fades in, fades out at the end.
+def hook_ass(S,F,hk,deco=False):
+    """Big accent word (was the hook word until 2026-11-10): Inter Tight Black, tight tracking, rises from below ('sunrise') and fades in, fades out at the end.
     Rendered white-on-black as a mask; the renderer fills it with the inverted picture (or a color) behind her.
     deco=True: its outline and drop shadow instead (hook.outline/outlineColor, hook.shadow/shadowBlur/shadowOpacity, fractions
     of the width like the caption ones; added 2026-11-07), drawn in color under the word, or None when both are off."""
-    W,H=S["W"],S["H"]; hk=S["p"]["hook"]; a,b=hk["a"],hk["b"]; lines,em,y=hook_geom(S,F)
+    W,H=S["W"],S["H"]; a,b=hk["a"],hk["b"]; lines,em,y=hook_geom(S,F,hk)
     fs=F.fs("black",em); d=int((b-a)*1000); rise=0.045*H; txt="\\N".join(esc(x) for x in lines)
     def ev(layer,dx,tags,fin,fout):
         return (f"Dialogue: {layer},{ts(a)},{ts(b+0.35)},G,,0,0,0,,{{\\an5\\move({W/2+dx:.0f},{y+rise+dx:.0f},{W/2+dx:.0f},{y+dx:.0f},0,650)\\fn{FONTS['black'][0]}\\fs{fs:.0f}"
@@ -329,12 +356,12 @@ def hook_ass(S,F,deco=False):
 
 EMOJI_FONT="/System/Library/Fonts/Apple Color Emoji.ttc"
 def _is_emoji(ch): o=ord(ch); return o>=0x1F000 or 0x2600<=o<0x27C0 or o in (0xFE0F,0x200D)
-def hook_card_png(S,path):
+def hook_card_png(S,path,hk):
     """Hook style "card" (added 2026-10-26): her approved text card drawn IN FRONT of her (no cut-out): slim cream panel,
     square corners, 8px gold bar, burgundy Montserrat with *accent words* in Instrument Serif Italic, | = line break,
     emoji from Apple Color Emoji. hook.y = panel top, hook.size = text size (fraction of the width)."""
     from PIL import Image, ImageDraw, ImageFilter
-    W,H=S["W"],S["H"]; hk=S["p"]["hook"]; s=W/1080; F=Fonts(FONTDIR)
+    W,H=S["W"],S["H"]; s=W/1080; F=Fonts(FONTDIR)
     lines=[x for x in re.split(r"\s*\|\s*",hk["text"]) if x]
     def runs(line):   # [(text, accent?, emoji?)]
         out=[]
@@ -378,12 +405,97 @@ def hook_card_png(S,path):
             else: d.text((x,base),it[1],font=it[3],fill=(110,26,46,255),anchor="ls"); x+=it[2]
     img.save(path)
 
-def hookmask(pp,wd):
-    """Person cut-out (Robust Video Matting) for the hook window, so the hook word sits behind her."""
-    S=load(pp); hk=S["p"].get("hook") or {}; os.makedirs(wd,exist_ok=True)
-    if not hk.get("enabled") or hk.get("style")=="card": print("no cut-out needed"); return
-    subprocess.run([sys.executable,os.path.join(HERE,"rvm_mask.py"),S["src"],os.path.join(wd,"hookmask.mp4"),str(max(0,hk["a"])),str(min(S["dur"],hk["b"]+0.4)),
-                    os.path.join(HERE,"rvm_mobilenetv3_fp32.onnx")],check=True)
+HB_STYLE={   # regular font, accent font, accent scale, text, accent text, box colour, line height, side pad, top/bottom pad, corner radius (in em)
+    "serif":("DMSerifDisplay-Regular.ttf","DMSerifDisplay-Italic.ttf",1.12,(250,240,226),(240,178,176),(38,28,24),1.18,0.36,0.2,0.26),
+    "sans": ("Poppins-SemiBold.ttf","Poppins-SemiBold.ttf",1.0,(244,244,244),(240,178,176),(22,22,22),1.32,0.5,0.32,0.32)}
+def hb_words(text):
+    """[[(word, accent?)] per forced line]: *x* = accent (may span words), | = line break."""
+    out=[]
+    for ln in re.split(r"\s*\|\s*",text.strip()):
+        ws=[]
+        for k,part in enumerate(ln.split("*")): ws+=[(w,k%2==1) for w in part.split()]
+        if ws: out.append(ws)
+    return out
+def hb_layout(text,style,em,maxw,wlen):
+    """Lines of the hook box: each forced line wraps into as few lines as fit maxw, balanced so they come out about even
+    (no long line over a lone word). wlen(word, accent?) = width. Same rules as the editor's preview."""
+    lines=[]
+    for ws in hb_words(text):
+        L=[wlen(w,acc) for w,acc in ws]; sp=wlen(" ",False)
+        def greedy(lim):
+            rows=[[]]; cw=0
+            for i,l in enumerate(L):
+                if rows[-1] and cw+sp+l>lim: rows.append([]); cw=0
+                cw+=(sp if rows[-1] else 0)+l; rows[-1].append(i)
+            return rows
+        n=len(greedy(maxw)); lo,hi=max(L),maxw
+        for _ in range(24):
+            mid=(lo+hi)/2
+            if len(greedy(mid))<=n: hi=mid
+            else: lo=mid
+        lines+=[[ws[i] for i in r] for r in greedy(hi)]
+    return lines
+def hookbox_png(S,path,hb):
+    """Hook text box (added 2026-11-10): her hook sentence in front of her for the first seconds, in a dark box.
+    style "serif" = the thumbnail's look (DM Serif Display cream, *accent* DM Serif Italic blush 12% bigger, one rounded box
+    per line joined into a stepped shape); "sans" = her older hook look (Poppins SemiBold off-white in one rounded box,
+    *accent* blush); "card" = her cream text card (hook_card_png). size = text size (fraction of the width), y = centre of
+    the box (fraction of the height), box = box opacity. Lines centred, at most 86% of the frame wide. The editor's preview
+    (Video Editor, Hook tab) draws it with the same rules."""
+    if hb.get("style")=="card": return hook_card_png(S,path,hb)
+    from PIL import Image, ImageDraw, ImageFilter
+    W,H=S["W"],S["H"]; st=HB_STYLE.get(hb.get("style"),HB_STYLE["serif"]); em=float(hb.get("size",0.064))*W
+    efont=ImageFont.truetype(EMOJI_FONT,160)
+    def fonts(em): return ImageFont.truetype(os.path.join(FONTDIR,st[0]),round(em)),ImageFont.truetype(os.path.join(FONTDIR,st[1]),round(em*st[2]))
+    def runs(w):   # emoji / text runs of one word
+        out=[]; buf=""; emo=None
+        for ch in w:
+            e=_is_emoji(ch)
+            if buf and e!=emo: out.append((buf,emo)); buf=""
+            buf+=ch; emo=e
+        if buf: out.append((buf,emo))
+        return out
+    def wlen(w,acc,reg,ita): return sum(len([c for c in t if ord(c) not in (0xFE0F,0x200D)])*em*1.08 if e else (ita if acc else reg).getlength(t) for t,e in runs(w))
+    for _ in range(14):   # shrink only if one word alone is wider than the frame allows
+        reg,ita=fonts(em); padx=st[7]*em; maxw=0.86*W-2*padx
+        lines=hb_layout(hb["text"],hb.get("style"),em,maxw,lambda w,acc:wlen(w,acc,reg,ita))
+        lw=[sum(wlen(w,acc,reg,ita) for w,acc in ln)+reg.getlength(" ")*(len(ln)-1) for ln in lines]
+        if max(lw)<=maxw+0.5: break
+        em*=0.94
+    lh=st[6]*em; pady=st[8]*em; r=st[9]*em; A,D=reg.getmetrics(); n=len(lines)
+    top=float(hb.get("y",0.56))*H-(n*lh+2*pady)/2; top=max(0.05*H,min(top,0.9*H-n*lh-2*pady))
+    box=Image.new("L",(W,H),0); d=ImageDraw.Draw(box)
+    if hb.get("style")=="sans":
+        m=max(lw); d.rounded_rectangle([W/2-m/2-padx,top,W/2+m/2+padx,top+n*lh+2*pady],radius=r,fill=255)
+    else:   # stepped: one rounded box per line, joined where they meet
+        rows=[(W/2-l/2-padx,top+pady+i*lh-(pady if i==0 else 0),W/2+l/2+padx,top+pady+(i+1)*lh+(pady if i==n-1 else 0)) for i,l in enumerate(lw)]
+        for x0,y0,x1,y1 in rows: d.rounded_rectangle([x0,y0,x1,y1],radius=r,fill=255)
+        for a,b in zip(rows,rows[1:]): d.rectangle([max(a[0],b[0]),a[3]-r,min(a[2],b[2]),b[1]+r],fill=255)
+    op=float(hb.get("box",0.74)); img=Image.new("RGBA",(W,H),st[5]+(0,)); img.putalpha(box.point(lambda v:round(v*op)))
+    txt=Image.new("RGBA",(W,H),(0,0,0,0)); dt=ImageDraw.Draw(txt)
+    for i,(ln,l) in enumerate(zip(lines,lw)):
+        x=W/2-l/2; base=top+pady+i*lh+(lh-(A+D))/2+A
+        for j,(w,acc) in enumerate(ln):
+            for t,e in runs(w):
+                if e:
+                    k=len([c for c in t if ord(c) not in (0xFE0F,0x200D)]); h=round(em*0.98)
+                    g=Image.new("RGBA",(220*len(t),220),(0,0,0,0)); ImageDraw.Draw(g).text((0,0),t,font=efont,embedded_color=True)
+                    g=g.crop(g.getbbox()); g=g.resize((max(1,round(g.width*h/g.height)),h),Image.LANCZOS)
+                    txt.alpha_composite(g,(round(x+(k*em*1.08-g.width)/2),round(base-0.84*h))); x+=k*em*1.08
+                else: f=ita if acc else reg; dt.text((x,base),t,font=f,fill=(st[4] if acc else st[3])+(255,),anchor="ls"); x+=f.getlength(t)
+            x+=reg.getlength(" ")
+    sh=Image.new("RGBA",(W,H),(0,0,0,0)); sh.putalpha(txt.getchannel("A").point(lambda v:round(v*0.35)))
+    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(3*W/1080)),(0,round(2*W/1080))); img.alpha_composite(txt)
+    img.save(path)
+
+def accent_mask(S,hk,wd):
+    """Person cut-out (Robust Video Matting) for one accent word's window, so the word sits behind her. Named by its
+    times, so a chunk reuses the cut-out the chunk before it made (the work dir is emptied for every render)."""
+    out=os.path.join(wd,f"accmask_{hk['a']:.3f}_{hk['b']:.3f}.mp4")
+    if not os.path.exists(out):
+        subprocess.run([sys.executable,os.path.join(HERE,"rvm_mask.py"),S["src"],out,str(max(0,hk["a"])),str(min(S["dur"],hk["b"]+0.4)),
+                        os.path.join(HERE,"rvm_mobilenetv3_fp32.onnx")],check=True)
+    return out
 
 def chain_beats(Z):
     """Each framing starts where the previous one ended (so edits in the editor stay smooth)."""
@@ -506,7 +618,11 @@ def chunk(pp,wd,n):
         else:
             d=max(0.2,b_-a_); terms.append(f"gte(t,{a_:.4f})*lt(t,{b_:.4f})*{z.get('z',1.064)-1:.4f}*pow(min(max(1-(t-{a_:.3f})/{d:.3f},0),1),1.5)")
     if terms or base or beats:
-        ZE="((1+"+("+".join(base) or "0")+")*(1+"+("+".join(terms) or "0")+")*(1+"+("+".join(beats) or "0")+"))"
+        # while an accent word shows, the framing eases back to wide (her head drops lower in the frame, so the word
+        # behind it stays readable; at medium/tight framing her head covered the middle of the word): 0.22 s each way
+        aw="+".join(f"(min(max((t-{x['a']:.3f})/0.22,0),1)*(1-min(max((t-{x['b']+0.35:.3f})/0.22,0),1)))" for x in accents(S) if x["a"]<t1+1 and x["b"]+0.6>t0-1)
+        BE=("+".join(beats) or "0")+(f")*(1-({aw})" if aw else "")
+        ZE="((1+"+("+".join(base) or "0")+")*(1+"+("+".join(terms) or "0")+")*(1+("+BE+")))"
         ax=W*float(S["p"].get("zoomAnchor",[0.5,0.5])[0]); ay=H*float(S["p"].get("zoomAnchor",[0.5,0.5])[1])
         zoomf=f"scale=w='trunc({W}*{ZE}/2)*2':h='trunc({H}*{ZE}/2)*2':eval=frame:flags=bicubic,crop={W}:{H}:x='{ax:.0f}*({ZE}-1)':y='{ay:.0f}*({ZE}-1)'"
         f.append(f"[{last}]{zoomf}[vz]"); last="vz"
@@ -526,35 +642,33 @@ def chunk(pp,wd,n):
                  f"[{tag}bg][{tag}fg]overlay=x='(W-w)/2':y='(H-h)/2':eval=frame[{tag}]"]
         else: f.append(f"[{k}:v]fps={fps},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS+{st:.4f}/TB{push}[{tag}]")
         f.append(f"[{last}][{tag}]overlay=enable='between(t,{b['a']:.3f},{b['b']:.3f})':eof_action=pass[o{j}]"); last=f"o{j}"; k+=1
-    hk=S["p"].get("hook") or {}
-    hm=os.path.join(wd,"hookmask.mp4")
-    if hk.get("enabled") and hk.get("text") and hk.get("style")=="card" and hk["a"]<t1 and hk["b"]>t0:   # text card (fully gone by b) in front of her
-        cp=os.path.join(wd,"hookcard.png"); hook_card_png(S,cp); a_,b_=hk["a"],hk["b"]
+    for i,hk in enumerate(accents(S)):   # big accent words behind her (person cut-out on top), each with its own cut-out
+        if not (hk["a"]<t1 and hk["b"]+0.4>t0): continue
+        hm=accent_mask(S,hk,wd); q=f"a{i}"
+        hp=os.path.join(wd,f"glo_acc{i}.ass"); open(hp,"w").write(hook_ass(S,Fonts(FONTDIR),hk))
+        dk=hook_ass(S,Fonts(FONTDIR),hk,deco=True)   # outline / drop shadow, also behind her
+        inputs+=["-i",hm,"-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=black:s={W}x{H}:r={fps}"]; pm=k; tm=k+1; k+=2
+        f+=[f"[{pm}:v]fps={fps},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS+{hk['a']:.6f}/TB"+(f",{zoomf}" if zoomf else "")+",format=gray"+(f",split[{q}pm][{q}pm2]" if dk else f"[{q}pm]"),
+            f"[{tm}:v]setpts=PTS-STARTPTS+{t0:.6f}/TB,subtitles=filename={fesc(hp)}:fontsdir={fesc(FONTDIR)},format=gray[{q}tm]",
+            f"[{q}tm][{q}pm]blend=all_expr='A*(255-B)/255',format=gray[{q}hm]",
+            f"[{last}]split[{q}b0][{q}v]"]
+        if dk:
+            dp=os.path.join(wd,f"glo_acc{i}deco.ass"); open(dp,"w").write(dk)
+            inputs+=["-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=black@0.0:s={W}x{H}:r={fps},format=rgba"]; dm=k; k+=1
+            f+=[f"[{dm}:v]setpts=PTS-STARTPTS+{t0:.6f}/TB,subtitles=filename={fesc(dp)}:fontsdir={fesc(FONTDIR)}:alpha=1,format=rgba,split[{q}dc][{q}da]",
+                f"[{q}da]alphaextract[{q}dal]",f"[{q}dal][{q}pm2]blend=all_expr='A*(255-B)/255'[{q}dam]",f"[{q}dc][{q}dam]alphamerge[{q}dw]",
+                f"[{q}b0][{q}dw]overlay=eof_action=pass:shortest=0[{q}b]"]
+        else: f.append(f"[{q}b0]null[{q}b]")
+        if hk.get("style","neg")=="neg": f.append(f"[{q}v]negate[{q}f]")
+        else: f.append(f"[{q}v]drawbox=c={'#FCFCFC' if hk.get('style')=='white' else hk.get('color','#FFFFFF')}:t=fill[{q}f]")
+        f+=[f"[{q}f][{q}hm]alphamerge[{q}w]",f"[{q}b][{q}w]overlay=eof_action=pass:shortest=0[{q}o]"]; last=f"{q}o"
+    hb=hook_text(S)
+    if hb and hb["a"]<t1 and hb["b"]>t0:   # hook text box in front of her, fades in (unless it starts the video) and out by b
+        cp=os.path.join(wd,"hookbox.png"); hookbox_png(S,cp,hb); a_,b_=hb["a"],hb["b"]
         inputs+=["-loop","1","-framerate",str(fps),"-t",f"{D+0.1:.3f}","-i",cp]
         fin=f",fade=t=in:st={a_:.3f}:d=0.25:alpha=1" if a_>0.01 else ""
-        f+=[f"[{k}:v]format=rgba,setpts=PTS-STARTPTS+{t0:.6f}/TB{fin},fade=t=out:st={b_-0.25:.3f}:d=0.25:alpha=1[hcard]",
-            f"[{last}][hcard]overlay=enable='between(t,{a_:.3f},{b_:.3f})':eof_action=pass[hk]"]; last="hk"; k+=1
-    elif hk.get("enabled") and hk.get("text") and hk["a"]<t1 and hk["b"]+0.4>t0:
-        meta=os.path.join(wd,"hookmask.json"); want={"a":hk["a"],"b":hk["b"],"src":S["src"]}
-        if not os.path.exists(hm) or not os.path.exists(meta) or json.load(open(meta))!=want:
-            hookmask(pp,wd); json.dump(want,open(meta,"w"))
-        hp=os.path.join(wd,"glo_hook.ass"); open(hp,"w").write(hook_ass(S,Fonts(FONTDIR)))
-        dk=hook_ass(S,Fonts(FONTDIR),deco=True)   # outline / drop shadow, also behind her
-        inputs+=["-i",hm,"-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=black:s={W}x{H}:r={fps}"]; pm=k; tm=k+1; k+=2
-        f+=[f"[{pm}:v]fps={fps},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS+{hk['a']-0.0:.6f}/TB"+(f",{zoomf}" if zoomf else "")+",format=gray"+(",split[pmask][pmask2]" if dk else "[pmask]"),
-            f"[{tm}:v]setpts=PTS-STARTPTS+{t0:.6f}/TB,subtitles=filename={fesc(hp)}:fontsdir={fesc(FONTDIR)},format=gray[tmask]",
-            "[tmask][pmask]blend=all_expr='A*(255-B)/255',format=gray[hmask]",
-            f"[{last}]split[hb0][hv]"]
-        if dk:
-            dp=os.path.join(wd,"glo_hookdeco.ass"); open(dp,"w").write(dk)
-            inputs+=["-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=black@0.0:s={W}x{H}:r={fps},format=rgba"]; dm=k; k+=1
-            f+=[f"[{dm}:v]setpts=PTS-STARTPTS+{t0:.6f}/TB,subtitles=filename={fesc(dp)}:fontsdir={fesc(FONTDIR)}:alpha=1,format=rgba,split[dkc][dka]",
-                "[dka]alphaextract[dkal]","[dkal][pmask2]blend=all_expr='A*(255-B)/255'[dkam]","[dkc][dkam]alphamerge[dkw]",
-                "[hb0][dkw]overlay=eof_action=pass:shortest=0[hb]"]
-        else: f.append("[hb0]null[hb]")
-        if hk.get("style","neg")=="neg": f.append("[hv]negate[hfill]")
-        else: f.append(f"[hv]drawbox=c={hk.get('color','#FFFFFF')}:t=fill[hfill]")
-        f+=["[hfill][hmask]alphamerge[hword]","[hb][hword]overlay=eof_action=pass:shortest=0[hk]"]; last="hk"
+        f+=[f"[{k}:v]format=rgba,setpts=PTS-STARTPTS+{t0:.6f}/TB{fin},fade=t=out:st={b_-0.3:.3f}:d=0.3:alpha=1[hbox]",
+            f"[{last}][hbox]overlay=enable='between(t,{a_:.3f},{b_:.3f})':eof_action=pass[hbo]"]; last="hbo"; k+=1
     if S.get("_flashes"):
         inputs+=["-f","lavfi","-t",f"{D+0.1:.3f}","-i",f"color=white@0.55:s={W}x{H}:r={fps},format=rgba"]
         en="+".join(f"between(t,{x:.3f},{x+0.066:.3f})" for x in S["_flashes"])
@@ -585,10 +699,10 @@ def assemble(pp,wd,out):
     print("assembled",out,"frames",nf,"expected",round(S["dur"]*S["fps"]/SP),f"(speed {SP}x)")
 
 def sheet(pp,video,out):
-    """Contact sheet for checking a render by eye: the hook, the middle of every B-roll slot, every card, and her face across the video (time on each frame)."""
-    p=json.load(open(pp)); d=p.get("duration") or float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",video],capture_output=True,text=True).stdout)
+    """Contact sheet for checking a render by eye: the hook text, every accent word, the middle of every B-roll slot, every card, and her face across the video (time on each frame)."""
+    p=json.load(open(pp)); legacy_hook(p); d=p.get("duration") or float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","csv=p=0",video],capture_output=True,text=True).stdout)
     sp=float(p.get("speed",1.0) or 1.0)
-    ts={0.6}|{round((s["a"]+s["b"])/2,2) for s in p.get("slots",[])}|{round(t["a"]+1.2,2) for t in p.get("tiles",[])}|{round(d*f,2) for f in (0.2,0.45,0.7,0.95)}
+    ts={0.6}|{round((s["a"]+s["b"])/2,2) for s in p.get("slots",[])}|{round(t["a"]+1.2,2) for t in p.get("tiles",[])}|{round(a["a"]+0.8,2) for a in p.get("accents",[])}|{round(d*f,2) for f in (0.2,0.45,0.7,0.95)}
     ts=sorted(t for t in ts if t<d)[:40]; tmp=out+"_f"; os.makedirs(tmp,exist_ok=True)
     for i,t in enumerate(ts):
         subprocess.run(["ffmpeg","-v","error","-y","-ss",f"{t/sp:.2f}","-i",video,"-frames:v","1","-vf",f"scale=216:-1,drawtext=text='{t}':x=5:y=5:fontsize=20:fontcolor=yellow",f"{tmp}/f_{i:02d}.jpg"])
@@ -604,7 +718,8 @@ if __name__=="__main__":
         for a,b,g in paginate(S,Fonts(FONTDIR)): print(f"{a:6.2f} "+" ".join(w["w"]+("["+w["emph"]+"]" if w.get("emph") else "") for w in g))
         print("chunks",len(spans(S)))
     elif cmd=="chunk": chunk(pp,sys.argv[3],int(sys.argv[4]))
-    elif cmd=="hookmask": hookmask(pp,sys.argv[3])
+    elif cmd=="hookbox":   # glorious.py hookbox PROJECT OUT.png: the hook text box alone, for checking by eye
+        S=load(pp); hb=hook_text(S); hookbox_png(S,sys.argv[3],hb) if hb else print("no hook text in this project")
     elif cmd=="autozoom":   # plan the zooms (approved Oct 21: Captions-style framing changes every ~1.5s + whips)
         autozoom(pp)
     elif cmd=="anchors":   # fill missing face anchors (fractions) for zooms
