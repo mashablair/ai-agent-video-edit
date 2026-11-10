@@ -863,9 +863,9 @@ const hookCapY=ch=>{const h=hbox();return h.enabled&&h.text.trim()&&h.capY!=null
 /* where the hook box goes (same rule as glorious.py hook_spot): above her head when there's plenty of room under Instagram's
    top bar, else just below her chin; captions drop below the box while it shows if they'd touch it. hookText.place holds
    her head top / chin measured over the whole hook (zooms included) by glorious.py placehook. */
-const HB_SAFE=[0.11,0.80];
+const HB_SAFE=[0.11,0.80],CAP_MAX=0.82;
 function hookSpot(pl,bh,gap=0.03){const [lo,hi]=HB_SAFE,free=pl.top-gap-lo;if(free-bh>=0.06)return{y:r3((lo+pl.top-gap)/2),capY:null};
-  const y=Math.min(pl.chin+gap+bh/2,hi-bh/2),need=y+bh/2+0.02+pl.capOff,norm=Math.min(pl.capNormal,pl.capB??9);return{y:r3(y),capY:need>norm?r3(need):null}}
+  const y=Math.min(pl.chin+gap+bh/2,hi-bh/2,CAP_MAX-pl.capOff-0.02-bh/2),need=y+bh/2+0.02+pl.capOff,norm=Math.min(pl.capNormal,pl.capB??9);return{y:r3(y),capY:need>norm?r3(need):null}}
 const r3=v=>Math.round(v*1000)/1000;
 function autoPlace(force){const h=hbox(),st=$('#stage');if(!h.place||(!force&&h.auto===false)||!h.text.trim()||h.style==='card')return;
   const W=st.clientWidth,H=st.clientHeight,L=hbLayout(h,W),s=L.st,bh=(L.lines.length*s[6]*L.em+2*s[8]*L.em)/H;

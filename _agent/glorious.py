@@ -47,9 +47,13 @@ def probe(src):
         if abs(int(sd.get("rotation",0)))==90: w,h=h,w
     n,d=map(int,s["r_frame_rate"].split("/")); return w,h,round(n/d),float(o["format"]["duration"])
 
+# A quoted one-word keyword keeps its punctuation outside the quotes: comment "choose", not "choose," (Maria, 2026-11-10:
+# the word in quotes is what viewers type to trigger her ManyChat automation, so it has to read exactly as typed).
+QUOTED=re.compile(r'^(["“])([^"“”\s]+?)([,.!?;:]+)(["”])$')
 def load(pp):
     p=json.load(open(pp)); src=os.path.join(VID,p["video"]); W,H,fps,dur=probe(src); c=p.get("captions",{}); legacy_hook(p)
     words=[w for w in p["words"] if not w.get("hide") and w.get("w") and w["s"]>=c.get("start",0)-1e-6]
+    for w in words: w["w"]=QUOTED.sub(r"\1\2\4\3",w["w"])   # comment "choose", : the trigger word stays clean inside its quotes
     return dict(p=p,src=src,W=W,H=H,fps=fps,dur=dur,words=words,broll=p.get("slots",[]),zooms=p.get("zooms",[]),
                 tiles=p.get("tiles",[]),cap_on=c.get("enabled",False) and c.get("engine")=="glorious",
                 cap_y=c.get("y",0.635),cap_y_broll=c.get("yB",0.70),c=c,
@@ -540,6 +544,7 @@ def face_track(S,a,b,step=0.2):
     return out
 
 HB_SAFE=(0.11,0.80)   # keep the hook box under Instagram's top bar and above its name/caption area
+CAP_MAX=0.82          # lowest caption centre while the hook shows (below that Instagram's name and caption cover them)
 def place_hook(pp,dry=False):
     """Put the hook text box where it covers no part of her face (Maria, 2026-11-10: it covered her chin): below her
     chin, or above her head when there's plenty of room there. Measured on the final framing (zooms included) over the
@@ -550,7 +555,9 @@ def place_hook(pp,dry=False):
     if not hb: print("no hook text"); return
     W,H=S["W"],S["H"]; tr=face_track(S,hb["a"],hb["b"])
     if not tr: print("no face found while the hook shows; left as is"); return
-    top=min(r[1] for r in tr); chin=max(r[2] for r in tr)
+    # a detection only counts when a neighbouring sample agrees (one-frame misdetections, e.g. 1108-1 at 0.4 s, chin 0.78)
+    ok=[r for k,r in enumerate(tr) if any(abs(q[2]-r[2])<0.04 and abs(q[1]-r[1])<0.06 and abs(q[0]-r[0])<0.45 for q in tr[max(0,k-2):k]+tr[k+1:k+3])] or tr
+    top=min(r[1] for r in ok); chin=max(r[2] for r in ok)
     F=Fonts(FONTDIR); off=0.0   # how far a caption page reaches above its centre line (fraction of H)
     for a,b_,g in paginate(S,F):
         if g[0]["s"]<hb["b"] and g[-1]["e"]>hb["a"]:
@@ -571,7 +578,8 @@ def hook_spot(pl,bh,gap=0.03):
     """(box centre y, caption y while it shows or None, "above"/"below"). Same rule as the editor's hookSpot."""
     lo,hi=HB_SAFE; free=pl["top"]-gap-lo
     if free-bh>=0.06: return round((lo+pl["top"]-gap)/2,3),None,"above her head"
-    y=min(pl["chin"]+gap+bh/2,hi-bh/2); where="below her chin" if y-bh/2>=pl["chin"]+0.01 else f"low as allowed (touches her chin by {pl['chin']+0.01-(y-bh/2):.3f})"
+    y=min(pl["chin"]+gap+bh/2,hi-bh/2,CAP_MAX-pl["capOff"]-0.02-bh/2)   # the captions must still fit under it
+    where="below her chin" if y-bh/2>=pl["chin"]+0.01 else f"low as allowed (touches her chin by {pl['chin']+0.01-(y-bh/2):.3f})"
     need=y+bh/2+0.02+pl["capOff"]; norm=min(pl["capNormal"],pl["capB"] if pl.get("capB") is not None else 9)
     return round(y,3),(round(need,3) if need>norm else None),where
 
