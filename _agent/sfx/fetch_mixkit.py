@@ -7,7 +7,7 @@ import json, os, subprocess, tempfile, urllib.request, numpy as np
 HERE=os.path.dirname(os.path.abspath(__file__)); M=json.load(open(os.path.join(HERE,"sfx.json"))); os.makedirs(os.path.join(HERE,"mixkit"),exist_ok=True)
 for name,m in M.items():
     with tempfile.TemporaryDirectory() as td:
-        raw=os.path.join(td,"raw.wav"); urllib.request.urlretrieve(urllib.request.Request(m["url"],headers={"User-Agent":"Mozilla/5.0"}).full_url,raw)
+        raw=os.path.join(td,"raw.wav"); open(raw,"wb").write(urllib.request.urlopen(urllib.request.Request(m["url"],headers={"User-Agent":"Mozilla/5.0"})).read())
         x=np.frombuffer(subprocess.run(["ffmpeg","-v","error","-i",raw,"-ac","1","-ar","48000","-f","f32le","-"],capture_output=True,check=True).stdout,np.float32)
         env=np.array([np.sqrt(np.mean(x[k:k+480]**2)+1e-12) for k in range(0,len(x),480)]); on=np.where(20*np.log10(env/env.max())>-40)[0]
         a=max(0,on[0]-2)*480; b=min(len(x),(on[-1]+5)*480)
