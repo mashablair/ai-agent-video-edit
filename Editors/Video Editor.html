@@ -490,7 +490,7 @@ async function loadProject(f){
   finalStart();
   toast('Loading the video and voice…',15000);
   S.cutFile=f.replace('_broll_project.json','_cut_project.json');
-  try{S.cut=JSON.parse(await (await S.vid.file(S.cutFile)).text());S.keep=cloneK(S.proj.cutKeep||S.cut.renderedKeep||S.cut.keep);
+  try{S.cut=JSON.parse(await (await S.vid.file(S.cutFile)).text());S.sig=await diskSig();S.keep=cloneK(S.proj.cutKeep||S.cut.renderedKeep||S.cut.keep);
     S.rawOK=await S.vid.has(S.cut.src);await main.load(S.cutFile);$('#toast').style.display='none'}catch(e){toast('Couldn’t load this video’s editor files: '+e.message,8000);return}
   S.csel=null;S.cjoin=null;lastChunk=null;
   if(!sameK(S.keep,S.cut.keep)){const r=applyKeep(S.cut.keep,0);S.dirty=true;toast(`Brought in the cuts you saved in the detailed cut editor${r.msg}. Save to keep them.`,8000)}
@@ -1317,15 +1317,20 @@ window.addEventListener('pointerup',()=>{if(!cDown)return;const d=cDown;cDown=nu
   if(!d.moved&&ckept(d.i)){const w=CW()[d.i],k=pieceIn(S.keep,wmid(w));const playing=!main.paused;seek(r2eK(S.keep,Math.max(w.s-0.03,S.keep[k][0])));if(playing)main.play()}});
 
 /* ---------- save ---------- */
+// what the two project files on disk looked like when this video was opened: if Detailed cuts or a render by Claude changed them
+// since, saving this tab would quietly put back the old cuts (2026-11-11: nearly undid her silence work in 1108-9)
+async function diskSig(){const rd=async f=>{try{const o=JSON.parse(await (await S.vid.file(f)).text());return JSON.stringify([o.keep,o.renderedKeep,o.rendered,o.savedAt,o.cutKeep])}catch{return ''}};
+  return (await rd(S.cutFile))+'|'+(await rd(S.projFile))}
 async function save(){
-  if(!S.proj)return;slots().forEach(s=>s.line=lineFor(s.a,s.b));const now=new Date().toISOString();
+  if(!S.proj)return;
+  if(S.sig&&await diskSig()!==S.sig&&!confirm('This video was changed outside this tab after you opened it (new cuts in Detailed cuts, or a new render by Claude).\n\nSaving now would replace those with what this tab has, including the OLD cuts.\n\nOK = save anyway · Cancel = keep the newer version (then reload this page and redo your changes)'))return;slots().forEach(s=>s.line=lineFor(s.a,s.b));const now=new Date().toISOString();
   const keep=S.keep.map(k=>[+k[0].toFixed(4),+k[1].toFixed(4)]),cutCh=!sameK(keep,S.cut.renderedKeep||[]);
   S.cut.keep=keep;S.cut.status=cutCh?'edited':'rendered';S.cut.savedAt=now;
   S.proj.cutKeep=keep;S.proj.duration=+klen(S.keep).toFixed(3);S.proj.status='edited';S.proj.savedAt=now;
   const err=e=>{toast('Couldn’t save: '+e.message,6000);return null};
   const ok1=await S.vid.write(S.cutFile,JSON.stringify(S.cut)).catch(err);if(ok1===null)return;
   const ok=await S.vid.write(S.projFile,JSON.stringify(S.proj,null,1)).catch(err);if(ok===null)return;
-  S.dirty=false;setStatus();
+  S.dirty=false;setStatus();S.sig=await diskSig();
   const name=pname(S.projFile,'_broll_project.json'),msg=`render my edits for ${name}`;
   toast(ok?`Saved. Now tell Claude: <b>“${msg}”</b> <button id="cpy" style="padding:2px 8px">Copy</button>`:`This browser can’t write to the folder, so two files were downloaded. Move them into <i>Videos/${name}/editor files</i>, then ask Claude to render.`,9000);
   const b=$('#cpy');b&&(b.onclick=()=>{navigator.clipboard.writeText(msg);b.textContent='Copied'})
