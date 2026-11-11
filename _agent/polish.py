@@ -223,6 +223,7 @@ def auto_segs(W,dur,E,db,fps):
             parts=np_
         out+=[{"s":x,"e":y} for x,y in parts if y-x>0.05]
     MP=E.get("max_pause",0.2)   # her CapCut edit: dead air squeezed to a short breath everywhere
+    BEAT=0.57   # longest kept beat (keep_pauses); she trimmed a 1.1 s beat to 0.57 s in 1108-9 (2026-11-11)
     if MP:
         o2=[]
         for g in out:
@@ -237,8 +238,15 @@ def auto_segs(W,dur,E,db,fps):
             for qa_,qb_ in runs:
                 # a word starting well inside the run is soft speech: leave it. One in the last 0.3 s is usually an early ASR timestamp
                 # (slow, noisy speech in IMG_0959 kept 0.4-0.8 s pauses this way), so squeeze it but start 40 ms before that timestamp
-                if qb_-qa_<MP or any(qa_<b and qb_>a for a,b in KP) or any(qa_+0.03<w<qb_-0.3 for w in WS): continue
-                lead=min([qb_-0.08]+[w-0.04 for w in WS if qa_+0.03<w<qb_])
+                # (her 1108-9 fix, 2026-11-11: ASR often puts the next word's timestamp inside the silence before it, which kept 0.55-0.7 s
+                # of dead air at the start and mid-sentence; it only counts as soft speech when there's sound within 0.3 s after it)
+                soft=[w for w in WS if qa_+0.03<w<qb_ and max(sm[ix(w):max(ix(w)+1,ix(min(qb_-0.03,w+0.3)))])>=th[ix(w)]-2]
+                if qb_-qa_<MP or any(qa_+0.03<w<qb_-0.3 for w in soft): continue
+                if any(qa_<b and qb_>a for a,b in KP):   # a kept beat (smile, smirk, dramatic pause) stays, but at most ~0.57 s:
+                    if qb_-qa_<=BEAT+0.05: continue    # 0.4 s after the line (the reaction) + 0.17 s before the next (her 1108-9 trim of a 1.1 s beat)
+                    if qa_<=x+0.011 or qb_>=y-0.011: continue
+                    pieces[-1][1]=qa_+0.40; pieces.append([qb_-0.17,y]); continue
+                lead=min([qb_-0.08]+[w-0.04 for w in soft])
                 # 0.12 s of tail after the voice fades, 0.08 s of lead-in: ~0.2 s thinking pause, like her CapCut re-cut
                 if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],lead)
                 elif qb_>=y-0.011: pieces[-1][1]=min(pieces[-1][1],qa_+0.12)

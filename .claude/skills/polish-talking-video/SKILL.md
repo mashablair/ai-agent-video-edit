@@ -93,6 +93,7 @@ She offered to supply before/after examples of her manual fixes. When she has sa
   - Scenic vlog openings: keep at most the first one or two looks at the view at ~1 s. She cut the third (1.9 s after "Such warm water").
   - Target for this kind of take: about 55% of the raw length (she kept 62 s of 111 s). If the kept text still has "and… then… so…" joins, it isn't done.
 - **Pauses (approved 2026-10-26 from her CapCut re-cut of 1025-1):** long pauses between thoughts lose viewers: cut thinking pauses to ~0.2 s. Keep only silent reaction beats; if the beat holds a stray sound or throwaway word (the "Next." after "they don't show up in your life" in 1103-1), she cuts it. **Exception, the very end:** no silent hold before the closing kiss or sign-off; keep the "mwah" itself but cut the wait before it (her 1103-5 fix). Keep reaction beats (smile, smirk, gesture after a punchline, e.g. "much better." → smile, "when I was 19." → smirk) and dramatic beats ("until … five in the morning") at their natural ~0.5–0.9 s via `keep_pauses`. Pauses are detected relative to the background noise (car hum sits ~-35 dB, above the old fixed -42 dB that let 1–1.3 s pauses through): 6 dB over the local background, capped at -34 dB (2026-11-07; at +4 dB, -38 dB room tone in 1103-5 kept a 0.77 s gap). After a cut word, the next piece starts at the kept word's onset, skipping a breath left between (1103-5: 0.56 s of breath after a cut "Um"). Still read the KEPT TEXT and check after each cut filler that no breath is left. Since 2026-11-08 (IMG_0959): a word timestamp in the last 0.3 s of a pause no longer blocks the squeeze (slow, noisy speech gets early ASR timestamps); the next piece starts 40 ms before it so a quiet k/t/s onset survives. Before a cut word, the piece ends 0.18 s after the kept word fades (a word's end time runs to the next word, so noise used to ride up to the cut).
+- **Silences she still trimmed (her 1108-9 re-cut, 2026-11-11):** (1) a kept dramatic beat ran 1.1 s; she cut it to ~0.57 s (0.4 s after the line, 0.17 s before the next), so kept beats are now capped there automatically. (2) a 0.7 s hesitation mid-sentence ("absolutely … not how") and 0.55 s of silence before her first word survived because the ASR put the next word's timestamp inside the silence, which the squeeze read as soft speech; it now only counts as speech when there's sound right after it. Dead air before the very first word: at most ~0.1 s. When reading the KEPT TEXT and `pauses.jpg`, treat any pause over ~0.4 s that isn't a smile/gesture beat as a miss.
 - **Pause squeezing:** dead air is squeezed to a short breath (`max_pause`), but the script still extends phrase edges until the voice fades, so words aren't clipped. Don't tighten the voice-fade padding; she complained about clipped words. Fixing clipped words, abrupt joins and missed fillers by hand used to take her the most time; that's what the Cut Editor is for.
 - **Speed:** keep normal speed. She speeds up manually in CapCut when she wants to.
 
@@ -340,6 +341,7 @@ def auto_segs(W,dur,E,db,fps):
             parts=np_
         out+=[{"s":x,"e":y} for x,y in parts if y-x>0.05]
     MP=E.get("max_pause",0.2)   # her CapCut edit: dead air squeezed to a short breath everywhere
+    BEAT=0.57   # longest kept beat (keep_pauses); she trimmed a 1.1 s beat to 0.57 s in 1108-9 (2026-11-11)
     if MP:
         o2=[]
         for g in out:
@@ -354,8 +356,15 @@ def auto_segs(W,dur,E,db,fps):
             for qa_,qb_ in runs:
                 # a word starting well inside the run is soft speech: leave it. One in the last 0.3 s is usually an early ASR timestamp
                 # (slow, noisy speech in IMG_0959 kept 0.4-0.8 s pauses this way), so squeeze it but start 40 ms before that timestamp
-                if qb_-qa_<MP or any(qa_<b and qb_>a for a,b in KP) or any(qa_+0.03<w<qb_-0.3 for w in WS): continue
-                lead=min([qb_-0.08]+[w-0.04 for w in WS if qa_+0.03<w<qb_])
+                # (her 1108-9 fix, 2026-11-11: ASR often puts the next word's timestamp inside the silence before it, which kept 0.55-0.7 s
+                # of dead air at the start and mid-sentence; it only counts as soft speech when there's sound within 0.3 s after it)
+                soft=[w for w in WS if qa_+0.03<w<qb_ and max(sm[ix(w):max(ix(w)+1,ix(min(qb_-0.03,w+0.3)))])>=th[ix(w)]-2]
+                if qb_-qa_<MP or any(qa_+0.03<w<qb_-0.3 for w in soft): continue
+                if any(qa_<b and qb_>a for a,b in KP):   # a kept beat (smile, smirk, dramatic pause) stays, but at most ~0.57 s:
+                    if qb_-qa_<=BEAT+0.05: continue    # 0.4 s after the line (the reaction) + 0.17 s before the next (her 1108-9 trim of a 1.1 s beat)
+                    if qa_<=x+0.011 or qb_>=y-0.011: continue
+                    pieces[-1][1]=qa_+0.40; pieces.append([qb_-0.17,y]); continue
+                lead=min([qb_-0.08]+[w-0.04 for w in soft])
                 # 0.12 s of tail after the voice fades, 0.08 s of lead-in: ~0.2 s thinking pause, like her CapCut re-cut
                 if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],lead)
                 elif qb_>=y-0.011: pieces[-1][1]=min(pieces[-1][1],qa_+0.12)
