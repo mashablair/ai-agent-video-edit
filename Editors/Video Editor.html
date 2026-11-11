@@ -379,14 +379,23 @@ const main=(()=>{
       if(P.paused===false)P.pause();
       setPieces(S.keep);
       if(!ctx)ctx=new AudioContext({sampleRate:48000});
-      buf=await ctx.decodeAudioData(await (await S.vid.file(c.voice)).arrayBuffer());
+      S.noise=(c.noise&&c.noise.level)||'standard';S.vbuf={};
+      buf=S.vbuf[S.noise]=await ctx.decodeAudioData(await (await S.vid.file(voicePath(c,S.noise))).arrayBuffer());
       const url=URL.createObjectURL(await S.vid.file(c.proxy));
       V.forEach(v=>{v.src=url;v._i=null;v._go=false});
       await Promise.all(V.map(v=>new Promise(r=>{if(v.readyState>=1)r();else v.onloadedmetadata=r})));
       P.t=0;cur=0;showing=null;V[0]._i=0;show(V[0]);V[0].currentTime=K.length?K[0][0]:0;st=newStats()},
+    async setVoice(level){const f=voicePath(S.cut,level);if(!S.vbuf[level])S.vbuf[level]=await ctx.decodeAudioData(await (await S.vid.file(f)).arrayBuffer());
+      const was=!P.paused;if(was)P.pause();buf=S.vbuf[level];if(was)P.play()},
     setKeep(k,at){if(!P.paused)P.pause();setPieces(k);V.forEach(v=>{v._i=null;v._go=false});showing=null;P.t=Math.max(0,Math.min(total(),at||0));cur=segAt(P.t);V[0]._i=cur;show(V[0]);V[0].currentTime=e2r(P.t)},
     stats:()=>st,reset(){st=newStats();lastFrame=0;renderStats()},pieces:()=>K.length,segCount:()=>segs.length,e2r,r2e};
   return P})();
+// background-noise level (2026-11-11): the cut project has the studio voice at all three levels; older projects only voice.wav
+const voicePath=(c,l)=>(c.voices&&c.voices[l])||c.voice;
+const NOISE_TIP={off:'No noise remover (good mic, or you already cleaned it in CapCut). EQ, compression and loudness stay.',standard:'Gentle noise remover (the usual).',strong:'Stronger noise remover for a noisy car or room. Can sound a little processed.'};
+async function setNoise(l){if(l===S.noise)return;toast('Loading the '+l+' voice…',4000);
+  try{await main.setVoice(l)}catch(e){toast('Couldn’t load that voice: '+e.message,6000);return}
+  S.noise=l;markDirty();renderCut();toast(l===(S.cut.renderedNoise||'standard')?'Background noise back to what the video has now.':`Background noise: <b>${l}</b>. Save, and the clean video is re-rendered with it.`,5000)}
 function renderStats(){const s=main.stats(),el=$('#hud');if(!el)return;
   el.textContent=`${s.cuts} cuts played · ${s.late} late · ${s.stutters} stutters · worst gap ${Math.round(s.gapMax)} ms · sync off ${s.frames?Math.round(s.syncSum/s.frames*1000):0} ms`}
 setInterval(()=>{if(!main.paused)renderStats()},500);
@@ -1308,7 +1317,9 @@ function renderCut(){if(!S.cut||S.tab!=='cut')return;
   const W=CW(),K=S.keep,R=S.cut.renderedKeep||K,d=klen(K)-klen(R);
   $('#cutBan').style.display=S.rawOK?'none':'block';
   $('#cutBan').textContent=`Your raw video (${S.cut.src}) isn’t in the folder, so cut changes can’t be rendered. Put it back to edit cuts.`;
-  $('#cutHead').innerHTML=`Length <b>${fmt(klen(K))}</b>${Math.abs(d)>0.005?` <span class="muted">(${d>0?'+':''}${d.toFixed(2)}s vs the rendered video)</span> <button id="cutReset" style="padding:2px 8px;margin-left:6px">Back to rendered cut</button>`:' <span class="muted">· same cut as the rendered video</span>'}`;
+  $('#cutHead').innerHTML=`Length <b>${fmt(klen(K))}</b>${Math.abs(d)>0.005?` <span class="muted">(${d>0?'+':''}${d.toFixed(2)}s vs the rendered video)</span> <button id="cutReset" style="padding:2px 8px;margin-left:6px">Back to rendered cut</button>`:' <span class="muted">· same cut as the rendered video</span>'}`
+    +(S.cut.voices?`<span class="noise" style="margin-left:14px">Background noise: ${['off','standard','strong'].map(l=>`<button data-noise="${l}" title="${NOISE_TIP[l]}" class="${S.noise===l?'primary':''}" style="padding:2px 8px">${l[0].toUpperCase()+l.slice(1)}${S.cut.noise&&S.cut.noise.auto&&S.cut.noise.level===l?' <span class="muted" style="font-size:11px">auto</span>':''}</button>`).join('')}${S.noise!==(S.cut.renderedNoise||'standard')?' <span class="muted">(the video now has '+(S.cut.renderedNoise||'standard')+')</span>':''}</span>`:'');
+  $('#cutHead').querySelectorAll('[data-noise]').forEach(b=>b.onclick=()=>setNoise(b.dataset.noise));
   if($('#cutReset'))$('#cutReset').onclick=backToRender;
   let a='';
   if(S.csel){const {i,j}=S.csel;let nk=0,nc=0;for(let x=i;x<=j;x++)ckept(x)?nk++:nc++;
@@ -1357,12 +1368,13 @@ window.addEventListener('pointerup',()=>{if(!cDown)return;const d=cDown;cDown=nu
 /* ---------- save ---------- */
 // what the two project files on disk looked like when this video was opened: if Detailed cuts or a render by Claude changed them
 // since, saving this tab would quietly put back the old cuts (2026-11-11: nearly undid her silence work in 1108-9)
-async function diskSig(){const rd=async f=>{try{const o=JSON.parse(await (await S.vid.file(f)).text());return JSON.stringify([o.keep,o.renderedKeep,o.rendered,o.savedAt,o.cutKeep])}catch{return ''}};
+async function diskSig(){const rd=async f=>{try{const o=JSON.parse(await (await S.vid.file(f)).text());return JSON.stringify([o.keep,o.renderedKeep,o.rendered,o.savedAt,o.cutKeep,o.noise,o.renderedNoise])}catch{return ''}};
   return (await rd(S.cutFile))+'|'+(await rd(S.projFile))}
 async function save(){
   if(!S.proj)return;
   if(S.sig&&await diskSig()!==S.sig&&!confirm('This video was changed outside this tab after you opened it (new cuts in Detailed cuts, or a new render by Claude).\n\nSaving now would replace those with what this tab has, including the OLD cuts.\n\nOK = save anyway · Cancel = keep the newer version (then reload this page and redo your changes)'))return;slots().forEach(s=>s.line=lineFor(s.a,s.b));const now=new Date().toISOString();
-  const keep=S.keep.map(k=>[+k[0].toFixed(4),+k[1].toFixed(4)]),cutCh=!sameK(keep,S.cut.renderedKeep||[]);
+  if(S.cut.voices&&S.noise){const n=S.cut.noise||{};if(n.level!==S.noise)S.cut.noise={...n,level:S.noise,auto:false};S.cut.voice=voicePath(S.cut,S.noise)}
+  const keep=S.keep.map(k=>[+k[0].toFixed(4),+k[1].toFixed(4)]),cutCh=!sameK(keep,S.cut.renderedKeep||[])||(S.noise||'standard')!==(S.cut.renderedNoise||'standard');
   S.cut.keep=keep;S.cut.status=cutCh?'edited':'rendered';S.cut.savedAt=now;
   S.proj.cutKeep=keep;S.proj.duration=+klen(S.keep).toFixed(3);S.proj.status='edited';S.proj.savedAt=now;
   const err=e=>{toast('Couldn’t save: '+e.message,6000);return null};

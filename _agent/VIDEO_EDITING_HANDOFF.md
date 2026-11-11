@@ -107,6 +107,7 @@ All of our processing ran on Maria's MacBook Pro (Apple Silicon), **but inside a
 
 4. **Studio voice on the whole raw take first, then cut** (so the Cut Editor preview sounds exactly like the render):
    `highpass 85 Hz → arnndn (RNNoise, mix 0.85) → EQ -3 dB @250 Hz → +3.5 dB @3.2 kHz → high-shelf +4 dB @6.5 kHz → compressor 3:1 (thr -26 dB, att 8 ms, rel 120 ms, makeup 4 dB) → deesser → two-pass loudnorm -14 LUFS / TP -1.5 / LRA 7`.
+   **Since 2026-11-11 the noise remover is a per-video level:** `off` (no arnndn; good mic or audio she cleaned in CapCut), `standard` (arnndn mix 0.85, as above), `strong` (arnndn mix 1.0 + `afftdn=nr=10:nf=-42:tn=1`, her pick for the noisy 1108-9). Auto-picked from the pause loudness each level leaves at -14 LUFS (strong if standard leaves > -35 dB and strong removes 5+ dB more; off if <= -45 dB or standard helps < 2.5 dB). All three voices go into `editor files/voice_<level>.wav`; she switches in the Video Editor's Cut tab; `render_edits.py` re-renders the clean video when it changes. Details in VERSION.txt.
    Her raw car audio sits around -35 LUFS; the result is much louder and clearer. Approved.
 
 5. **Frame-exact chunked rendering.**

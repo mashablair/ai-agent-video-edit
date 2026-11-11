@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render what Maria saved in the Video Editor, in one command:  render_edits.py NAME [--dry]
 
-1. Cuts changed (cut project keep != renderedKeep)? Re-render the clean video from the raw take
+1. Cuts or the background-noise level changed (cut project keep != renderedKeep, noise.level != renderedNoise)? Re-render the clean video from the raw take
    (polish.py fromcut/plan/audio/chunk/assemble/qa), deliver Videos/NAME/NAME_clean_vN.mp4 and refresh the cut project.
    The visuals were already moved to the new cut by the editor (broll project "cutKeep"); polish.py remap only
    moves them when they still sit on the old cut (e.g. after an edit in the old Cut Editor).
@@ -38,7 +38,10 @@ def main(name,dry=False):
     D=f"{VID}/Videos/{name}"; ED=f"{D}/editor files"; CP=f"{ED}/{name}_cut_project.json"; BP=f"{ED}/{name}_broll_project.json"
     C=J(CP); B=J(BP)
     cut_changed=not same(C["keep"],C.get("renderedKeep"))
-    print(f"{name}: cuts {'CHANGED' if cut_changed else 'unchanged'} ({sum(b-a for a,b in C['keep']):.2f}s vs rendered {sum(b-a for a,b in C.get('renderedKeep') or []):.2f}s); visuals status {B.get('status')}")
+    lv,rlv=(C.get("noise") or {}).get("level","standard"),C.get("renderedNoise","standard"); noise_changed=lv!=rlv
+    print(f"{name}: cuts {'CHANGED' if cut_changed else 'unchanged'} ({sum(b-a for a,b in C['keep']):.2f}s vs rendered {sum(b-a for a,b in C.get('renderedKeep') or []):.2f}s); "
+          f"background noise {lv}{f' (was {rlv}: CHANGED)' if noise_changed else ''}; visuals status {B.get('status')}")
+    cut_changed=cut_changed or noise_changed
     if dry: return
     if cut_changed:
         raw=os.path.join(VID,C["src"])
@@ -73,7 +76,7 @@ def main(name,dry=False):
     shutil.copy(f"{wd}/final.mp4",new); print("  delivered",os.path.relpath(new,VID))
     B["status"]="rendered"; B["rendered"]=os.path.relpath(new,VID); json.dump(B,open(BP,"w"),indent=1)
     C=J(CP)
-    if C.get("status")=="edited" and same(C["keep"],C.get("renderedKeep")): C["status"]="rendered"; json.dump(C,open(CP,"w"))
+    if C.get("status")=="edited" and same(C["keep"],C.get("renderedKeep")) and (C.get("noise") or {}).get("level","standard")==C.get("renderedNoise","standard"): C["status"]="rendered"; json.dump(C,open(CP,"w"))
     if old and old!=new: retire(old)
     # usage log: replace this video's line, keep its topic
     if os.path.isfile(CAT):

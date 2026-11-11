@@ -35,6 +35,7 @@ In the commands, `PY=~/vidpolish/.venv/bin/python`, `POL=_agent/polish.py`, `WD=
    - `delete_times` are raw-time cuts for fillers, slivers or dead air the word list doesn't cover.
    - `keep_pauses` are raw ranges of reaction beats to keep (step 3).
    - `max_pause` (default 0.2 s) squeezes dead air to a short breath, matching her own CapCut pass.
+   - `noise` (optional): `off` / `standard` / `strong` background-noise remover. Leave it out: the `audio` step auto-picks (see "Audio rules").
    - Leave out `hook`, `cards`, `zoom` and `speed`. The script defaults to no overlays, no zoom and normal speed. Add one only if she explicitly asks for it on that video (`"zoom": true` gives the face-anchored 1.22x zooms; `"speed": 1.1` speeds up with pitch preserved).
 3. **Plan and look at the pauses.** `$PY $POL plan $WD`, then `$PY $POL pauses $WD` and view `$WD/pauses.jpg` (3 frames per pause >=0.4 s, numbered as in the printed list). Thinking pauses are squeezed to ~0.2 s automatically; for any pause where she smiles, smirks, rolls her eyes, gestures, or holds a deliberate dramatic beat, add its raw range to `keep_pauses` and plan again. Plan prints the final length and the KEPT TEXT; the kept text is only a rough guide around squeezed pauses, step 4 is the real check.
 4. **Hear the cut before rendering video.** `$PY $POL audio $WD && $PY $POL hear $WD`. `hear` re-transcribes the cut audio and lists:
@@ -98,7 +99,10 @@ She offered to supply before/after examples of her manual fixes. When she has sa
 - **Speed:** keep normal speed. She speeds up manually in CapCut when she wants to.
 
 ## Audio rules
-- **Studio voice:** 85 Hz high-pass, RNNoise at mix 0.85, -3 dB at 250 Hz, +3.5 dB at 3.2 kHz, +4 dB high shelf at 6.5 kHz, 3:1 compression, de-esser, then two-pass loudnorm to -14 LUFS. Her raw car audio sits around -35 LUFS, so the result is much louder; that's expected.
+- **Studio voice:** 85 Hz high-pass, noise remover (see below), -3 dB at 250 Hz, +3.5 dB at 3.2 kHz, +4 dB high shelf at 6.5 kHz, 3:1 compression, de-esser, then two-pass loudnorm to -14 LUFS. Her raw car audio sits around -35 LUFS, so the result is much louder; that's expected.
+- **Background noise, three levels per video (her request, 2026-11-11):** `off` = no noise remover (good mic, or audio she already cleaned in CapCut; EQ, compression and loudness stay), `standard` = RNNoise mix 0.85 (the chain used before), `strong` = RNNoise mix 1.0 + `afftdn=nr=10:nf=-42:tn=1` (her pick for the noisy 1108-9). Don't make strong the default; she often records with a good mic.
+  - **Auto pick** (`noise_level`, runs at the `audio` step and prints its reasoning): all three voices are made (about 2 s per minute of raw video) and the pause loudness at -14 LUFS is measured for each. Strong if standard still leaves the pauses above -35 dB and strong takes out 5 dB more (1108-9 at standard: -32, too noisy for her; 1108-4 at -37 was fine). Off if the pauses are already at -45 dB or below, or standard improves them by under 2.5 dB (nothing steady to remove, e.g. she barely pauses). Otherwise standard. Say which level was picked in the reply.
+  - To force a level, put `"noise": "off"|"standard"|"strong"` in edits.json. `cutproject` writes all three (`editor files/voice_off|standard|strong.wav`) and `noise:{level,floor,auto}` + `renderedNoise` into the cut project; she switches it in the Video Editor's Cut tab, and `render_edits.py` re-renders the clean video when `noise.level` differs from `renderedNoise`. Cut projects from before then were given the three voices with `polish.py noiseproject PROJECT [LEVEL]` (they were all rendered with standard).
 - **Metadata:** the script strips all metadata, including the iPhone's GPS location. Keep it that way.
 
 ## If she asks for zooms here anyway
@@ -122,7 +126,7 @@ Write this verbatim to `_agent/polish.py` and `~/vidpolish/polish.py` (`cat > _a
   Checking: hear WD (re-transcribe the cut audio before rendering) | prof WD A B (raw loudness around a spot)
   Step 2 helper: words CLEAN OUT.json (caption word timings of a clean video)
   One command: render WD (plan..qa) | deliver WD NAME (into Videos/NAME/, never overwrites, + cut project)
-  Cut Editor round trip: cutproject WD NAME [CLEAN] | fromcut PROJECT WD | remap PROJECT BROLLPROJECT | capsync BROLLPROJECT CLEAN OLDKEEP.json | proxy WD NAME | voice WD
+  Cut Editor round trip: cutproject WD NAME [CLEAN] | fromcut PROJECT WD | noiseproject PROJECT [LEVEL] | remap PROJECT BROLLPROJECT | capsync BROLLPROJECT CLEAN OLDKEEP.json | proxy WD NAME | voice WD
 WD = work dir (outside the user's folder). Edits are decided by Claude in WD/edits.json
 (delete_words items may carry a reason: [a,b,"filler"|"restart"|"ramble"|"trim"]) or come from her Cut Editor ("keep" pieces)."""
 import sys, os, json, re, subprocess, math
@@ -525,16 +529,51 @@ def make_cards(wd,M,P):
         im.resize((int(im.width*s),int(im.height*s))).save(f"{wd}/hook.png")
 
 
-# "studio voice": rumble HPF, RNN denoise, de-box, presence, air, compression, de-ess (loudness -14 LUFS is set after cutting)
-STUDIO="highpass=f=85:poles=2,arnndn=m={rnn}:mix=0.85,equalizer=f=250:t=q:w=1.2:g=-3,equalizer=f=3200:t=q:w=1.0:g=3.5,highshelf=f=6500:g=4,acompressor=threshold=-26dB:ratio=3:attack=8:release=120:makeup=4dB:knee=4,deesser=i=0.4"
+# "studio voice": rumble HPF, noise remover, de-box, presence, air, compression, de-ess (loudness -14 LUFS is set after cutting)
+STUDIO="highpass=f=85:poles=2,{nr}equalizer=f=250:t=q:w=1.2:g=-3,equalizer=f=3200:t=q:w=1.0:g=3.5,highshelf=f=6500:g=4,acompressor=threshold=-26dB:ratio=3:attack=8:release=120:makeup=4dB:knee=4,deesser=i=0.4"
+# background-noise remover, per video (2026-11-11): "off" for a good mic or audio she already cleaned in CapCut (the rest of
+# the studio voice stays), "standard" = the chain used until then, "strong" = her pick for the noisy 1108-9 (sample B)
+NOISE={"off":"","standard":"arnndn=m={rnn}:mix=0.85,","strong":"arnndn=m={rnn}:mix=1.0,afftdn=nr=10:nf=-42:tn=1,"}
 FADE=0.012   # tiny fade at every cut edge (the Cut Editor preview uses the same)
 
-def voice(wd):
+def heard_floor(wav,span=None):
+    """Background as she'd hear it: pause loudness (dB) once the voice is at -14 LUFS. 0.35 s median so only real pauses
+    count, 10th percentile inside the speaking span (silence before the first and after the last word doesn't count)."""
+    import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view
+    t=subprocess.run(["ffmpeg","-hide_banner","-i",wav,"-af","ebur128","-f","null","-"],capture_output=True,text=True).stderr
+    g=-14-float(re.findall(r"I:\s+(-?[\d.]+) LUFS",t)[-1])
+    a=np.frombuffer(subprocess.run(["ffmpeg","-v","error","-i",wav,"-ac","1","-ar","16000","-f","s16le","-"],capture_output=True,check=True).stdout,np.int16).astype(np.float32)/32768
+    n=len(a)//800; db=10*np.log10((a[:n*800].reshape(n,800)**2).mean(1)+1e-12)+g
+    if span: db=db[int(span[0]*20):int(span[1]*20)] if span[1]-span[0]>2 else db
+    return round(float(np.percentile(np.median(sliding_window_view(db,7),axis=1),10)),1)
+
+def noise_pick(fl):
+    """Auto pick from what each level achieves on THIS video (calibrated 2026-11-11 on her 16 raws: 1108-9 at standard
+    left -32 dB in the pauses and she found it noisy; 1108-4 at -37 was fine)."""
+    if fl["standard"]>-35 and fl["standard"]-fl["strong"]>=5: return "strong"   # still audible, and strong really removes more
+    if fl["off"]<=-45 or fl["off"]-fl["standard"]<2.5: return "off"   # already quiet, or nothing steady for the remover to take out
+    return "standard"
+
+def noise_level(wd):
+    """The noise level for this work dir: her choice (edits.json "noise", from the cut project) or the auto pick (saved in meta.json)."""
+    E=J(f"{wd}/edits.json") if os.path.exists(f"{wd}/edits.json") else {}
+    if E.get("noise") in NOISE: return E["noise"]
+    M=J(f"{wd}/meta.json")
+    if "noise" not in M:
+        D=J(f"{wd}/words.json") if os.path.exists(f"{wd}/words.json") else {}; Wd=D.get("words") or []
+        span=(Wd[0]["s"],Wd[-1]["e"]) if Wd else None
+        fl={k:heard_floor(voice(wd,k),span) for k in NOISE}
+        M=J(f"{wd}/meta.json"); M["noise"]={"level":noise_pick(fl),"floor":fl,"auto":True}; W_(f"{wd}/meta.json",M)
+        print(f"background noise in the pauses (off/standard/strong): {fl['off']}/{fl['standard']}/{fl['strong']} dB -> {M['noise']['level']}")
+    return M["noise"]["level"]
+
+def voice(wd,level=None):
     """Studio voice on the WHOLE raw take, before cutting. The Cut Editor plays this same file, so the preview sounds like the render."""
-    M=J(f"{wd}/meta.json"); out=f"{wd}/voice.wav"
+    M=J(f"{wd}/meta.json"); level=level or noise_level(wd); out=f"{wd}/voice_{level}.wav"
     if os.path.exists(out) and os.path.getsize(out)>1000: return out
     rnn=RNN if os.path.exists(RNN) else f"{DEFAULT_TOOLS}/sh.rnnn"
-    sh(["ffmpeg","-v","error","-y","-i",M["src"],"-vn","-af","aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono,"+STUDIO.format(rnn=rnn),"-ar","48000","-c:a","pcm_s16le",out])
+    sh(["ffmpeg","-v","error","-y","-i",M["src"],"-vn","-af","aresample=48000,aformat=sample_fmts=fltp:channel_layouts=mono,"+STUDIO.format(nr=NOISE[level].format(rnn=rnn)),"-ar","48000","-c:a","pcm_s16le",out])
     return out
 
 def audio(wd):
@@ -711,15 +750,16 @@ def cutproject(wd,name,clean=None):
     M=J(f"{wd}/meta.json"); D=J(f"{wd}/words.json"); P=J(f"{wd}/plan.json")
     E=J(f"{wd}/edits.json") if os.path.exists(f"{wd}/edits.json") else {}
     W=D["words"]; cd=edfiles(name)
-    shutil.copy(voice(wd),f"{cd}/voice.wav")
-    if not os.path.exists(f"{cd}/proxy.mp4"): proxy(wd,name)
     pj=f"{cd}/{name}_cut_project.json"; old=J(pj) if os.path.exists(pj) else {}
+    noise=voices(wd,cd,old)
+    if not os.path.exists(f"{cd}/proxy.mp4"): proxy(wd,name)
     db=db10(f"{wd}/a16.wav") if os.path.exists(f"{wd}/a16.wav") else old["db"]; keep=[[round(g["s"],4),round(g["e"],4)] for g in P["segs"]]
     cuts=[]
     for d in E.get("delete_words",[]):
         a,b=d[0],d[1]; cuts.append({"a":a,"b":b,"why":d[2] if len(d)>2 else cut_reason(W,a,b)})
     if E.get("keep"): cuts=old.get("cuts",[])   # re-render of her cuts: keep Claude's original reasons
-    proj={"version":1,"kind":"cut","name":name,"src":os.path.relpath(M["src"],VIDDIR),"proxy":f"Videos/{name}/editor files/proxy.mp4","voice":f"Videos/{name}/editor files/voice.wav",
+    proj={"version":1,"kind":"cut","name":name,"src":os.path.relpath(M["src"],VIDDIR),"proxy":f"Videos/{name}/editor files/proxy.mp4","voice":f"Videos/{name}/editor files/voice_{noise['level']}.wav",
+          "voices":{k:f"Videos/{name}/editor files/voice_{k}.wav" for k in NOISE},"noise":noise,"renderedNoise":noise["level"],
           "clean":clean or old.get("clean") or f"Videos/{name}/{name}_clean.mp4","w":M["w"],"h":M["h"],"fps":M["fps"],"dur":D["dur"],
           "words":[{"w":w["w"],"s":round(w["s"],3),"e":round(w["e"],3)} for w in W],"db":[int(round(max(-90,x))) for x in db] if not isinstance(db,list) else db,
           "cuts":cuts,"keep":keep,"autoKeep":old.get("autoKeep") or keep,"renderedKeep":keep,"ignored":old.get("ignored",[]),
@@ -732,12 +772,40 @@ def fromcut(projpath,wd):
     P=J(projpath); src=os.path.join(VIDDIR,P["src"]); os.makedirs(wd,exist_ok=True); w,h,fps,dur=probe(src)
     W_(f"{wd}/meta.json",{"src":src,"w":w,"h":h,"fps":fps,"dur":dur})
     W_(f"{wd}/words.json",{"words":P["words"],"silences":[],"dur":P["dur"]})
-    vp=os.path.join(VIDDIR,P.get("voice",""))
-    if os.path.isfile(vp): shutil.copy(vp,f"{wd}/voice.wav")
-    W_(f"{wd}/edits.json",{"keep":P["keep"]})
+    lv=(P.get("noise") or {}).get("level","standard")   # projects from before 2026-11-11 were all rendered with "standard"
+    vp=os.path.join(VIDDIR,(P.get("voices") or {}).get(lv,P.get("voice","")))
+    if os.path.isfile(vp): shutil.copy(vp,f"{wd}/voice_{lv}.wav")
+    W_(f"{wd}/edits.json",{"keep":P["keep"],"noise":lv})
     old,new=P.get("renderedKeep") or [],P["keep"]
     sg=lambda L:set((round(a,2),round(b,2)) for a,b in L)
     print(f"her cuts: {len(new)} pieces, {sum(b-a for a,b in new):.2f}s (last render {sum(b-a for a,b in old):.2f}s); pieces changed since the last render: {len(sg(new)-sg(old))}")
+    if lv!=P.get("renderedNoise","standard"): print(f"background noise: {P.get('renderedNoise','standard')} -> {lv}")
+
+def voices(wd,cd,old={}):
+    """All three noise levels of the studio voice into the editor files, so the Video Editor can switch between them instantly
+    (about 2 s per minute of raw video). Returns the cut project's noise setting: kept if she or Claude already chose one."""
+    import shutil
+    for k in NOISE: shutil.copy(voice(wd,k),f"{cd}/voice_{k}.wav")
+    lv=noise_level(wd); M=J(f"{wd}/meta.json"); n=dict(old.get("noise") or M.get("noise") or {"auto":False})
+    n["level"]=lv
+    return n
+
+def noiseproject(projpath,level=None):
+    """Give a cut project made before 2026-11-11 the three noise levels (voice_off/standard/strong.wav) and the auto pick
+    (or LEVEL). Its last render used "standard", so a different pick re-renders the clean video at the next render_edits."""
+    P=J(projpath); src=os.path.join(VIDDIR,P["src"]); cd=os.path.dirname(projpath); wd=f"{HOME}/vp/_noise_{P['name']}"
+    os.makedirs(wd,exist_ok=True); w,h,fps,dur=probe(src); W_(f"{wd}/meta.json",{"src":src,"w":w,"h":h,"fps":fps,"dur":dur})
+    W_(f"{wd}/words.json",{"words":P["words"],"dur":P["dur"]})
+    if level: W_(f"{wd}/edits.json",{"noise":level})
+    old=f"{cd}/voice.wav"
+    if os.path.isfile(old) and not os.path.exists(f"{cd}/voice_standard.wav"): os.rename(old,f"{cd}/voice_standard.wav")   # same chain
+    for k in NOISE:   # reuse the voices made by an earlier run
+        if os.path.isfile(f"{cd}/voice_{k}.wav"): os.replace(f"{cd}/voice_{k}.wav",f"{wd}/voice_{k}.wav")
+    n=voices(wd,cd); n["auto"]=not level
+    P.update(voice=f"Videos/{P['name']}/editor files/voice_{n['level']}.wav",voices={k:f"Videos/{P['name']}/editor files/voice_{k}.wav" for k in NOISE},
+             noise=n,renderedNoise=P.get("renderedNoise","standard"))
+    W_(projpath,P); import shutil; shutil.rmtree(wd)
+    fl=n.get("floor") or {}; print(f"{P['name']}: pauses off/standard/strong {fl.get('off')}/{fl.get('standard')}/{fl.get('strong')} dB -> {n['level']}{' (auto)' if n['auto'] else ''}; rendered with {P['renderedNoise']}")
 
 def _offs(L):
     o=[0.0]
@@ -862,6 +930,7 @@ if __name__=="__main__":
     elif cmd=="proxy": proxy(a[1],a[2])
     elif cmd=="cutproject": cutproject(a[1],a[2],a[3] if len(a)>3 else None)
     elif cmd=="fromcut": fromcut(a[1],a[2])
+    elif cmd=="noiseproject": noiseproject(a[1],a[2] if len(a)>2 else None)
     elif cmd=="remap": remap(a[1],a[2])
     elif cmd=="capsync": capsync(a[1],a[2],a[3])
     elif cmd=="hear": hear(a[1])
