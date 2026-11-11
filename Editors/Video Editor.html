@@ -45,7 +45,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) var(--side,380px);min-heig
 #capBox .bx{-webkit-box-decoration-break:clone;box-decoration-break:clone}
 #capBox.glo{transform:none;text-align:center;white-space:nowrap;line-height:1}
 #capBox.glo .gl{display:block;white-space:nowrap}
-#capBox.glo .gw{display:inline-block;opacity:0;transform:translateX(-.35em)}
+#capBox.glo .gw{display:inline-block;opacity:0;transform:translateX(-.25em)}
 #capBox.glo .gw.on{opacity:1;transform:none;transition:opacity .17s linear,transform .23s ease-out}
 #capBox.glo .gw.neg{color:#fff;mix-blend-mode:difference}
 #tileBox{position:absolute;left:10.4%;top:78.8%;width:78%;height:13.2%;background:rgba(248,248,248,.98);color:#555;display:none;pointer-events:none;box-sizing:border-box}
@@ -808,7 +808,7 @@ function gloRaw(){ // phrases -> pages (same rules as _agent/glorious.py)
     for(const g of segs){const n=g.length,k=Math.ceil(n/5),base=Math.floor(n/k),ex=n%k;let i=0;for(let j=0;j<k;j++){const m=base+(j<ex?1:0);G.push(g.slice(i,i+m));i+=m}}}
   return G}
 function gloRows(pg,sw){ // Captions-style wrapping: fill lines up to the line width; a final keyword gets its own line
-  const em=st=>gsize(st)*sw,sp=0.22*em('small'),maxl=gset('gLine')*sw;
+  const em=st=>gsize(st)*sw,sp=0.36*em('small'),maxl=gset('gLine')*sw;
   const wl=(w,st)=>{_mc.font=`${em(st)}px 'cap-${GLO[st][0]}'`;return _mc.measureText(w.w).width-0.017*em(st)*w.w.length};
   const kw=!!pg.at(-1).emph&&pg.length>=2,body=kw?pg.slice(0,-1):pg,rows=[];let cur=[],cw=0;
   body.forEach((w,k)=>{const st=w.emph||(((k===0&&pg.length>1)||pg.length===1)?'big':'small'),l=wl(w,st);
@@ -819,7 +819,7 @@ function gloPages(){const raw=gloRaw(),out=[];
   return out.map((g,i)=>{const a=g[0].s-0.08;let b=i+1<out.length?out[i+1][0].s-0.08:g.at(-1).e+0.5;return{a,b:Math.min(b,g.at(-1).e+1.0),words:g}})}
 const _mc=document.createElement('canvas').getContext('2d');
 function gloHTML(ch,sw){
-  const rows=gloRows(ch.words,sw),em=st=>gsize(st)*sw,sp=0.22*em('small'),maxw=(1-2*gset('gPad'))*sw;
+  const rows=gloRows(ch.words,sw),em=st=>gsize(st)*sw,sp=0.36*em('small'),maxw=(1-2*gset('gPad'))*sw;
   const wl=(w,st)=>{_mc.font=`${em(st)}px 'cap-${GLO[st][0]}'`;return _mc.measureText(w.w).width-0.017*em(st)*w.w.length};
   const tot=r=>r.reduce((n,[w,st])=>n+wl(w,st),0)+sp*(r.length-1);
   return rows.map((r,ri)=>{const k=Math.min(1,maxw/tot(r)),eh=Math.max(...r.map(([w,st])=>em(st)))*k;
@@ -1281,6 +1281,7 @@ function remapVisuals(old,nw){const oo=koffs(old),on=koffs(nw),P=S.proj;
   if(P.hookText){P.hookText.a=r3(mp(P.hookText.a)[0]);P.hookText.b=r3(mp(P.hookText.b)[0])}
   P.accents=(P.accents||[]).map(x=>Object.assign({},x,{a:r3(mp(x.a)[0]),b:r3(mp(x.b)[0])})).filter(x=>{if(x.b-x.a<0.15){flags.push(`accent “${x.text}” was on cut material and was removed`);return false}return true});
   if(P.whipAt)P.whipAt=P.whipAt.map(t=>r3(mp(t)[0]));
+  if(P.sfx&&P.sfx.cues)P.sfx.cues=P.sfx.cues.filter(c=>innew(c2r(c.t))).map(c=>Object.assign({},c,{t:r3(mp(c.t)[0])}));   // sound effects (same as polish.py remap)
   P.duration=r3(on.at(-1));
   const q=a=>a.length>4?a.slice(0,4).join(' ')+'…':a.join(' ');
   let msg='';if(lost.length)msg+=`. Captions lost “${q(lost)}”`;if(added.length)msg+=`. Captions gained “${q(added)}”`;if(flags.length)msg+='. '+flags.join('; ');

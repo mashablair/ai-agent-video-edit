@@ -15,7 +15,9 @@ Usage:  glorious.py numbers PROJECT.json [--dry]  -> spoken prices/years/percent
         glorious.py assemble PROJECT.json WD OUT -> joins chunks + the source audio
         glorious.py hookbox PROJECT.json OUT.png -> the hook text box alone (to check it by eye)
         glorious.py placehook PROJECT.json [--dry] -> puts the hook box below her chin (or above her head when there's
-                                                  room) and moves the captions under it while it shows
+                                                  room) and moves the captions under it while it shows; also placeaccents
+        glorious.py sfx PROJECT.json [--dry]       -> plans the sound effects (project "sfx"; mixed in by assemble)
+        glorious.py placeaccents PROJECT.json [--dry] -> accent words just above her head, the head covering them slightly
 Times are absolute; each chunk is rendered on an absolute timeline, so captions/B-roll can cross chunk edges."""
 import json, os, re, sys, subprocess, math
 from PIL import ImageFont
@@ -27,6 +29,8 @@ WHITE="#FCFCFC"; YELLOW="#F2EC2E"; MUSTARD="#D9C933"; NUMCOL="#FFB000"
 STY={"small":("sans",.068,WHITE,False),"big":("sans",.13,WHITE,False),"neg":("sansi",.12,WHITE,True),
      "serif":("serif",.14,WHITE,False),"script":("script",.15,YELLOW,False),"yellow":("sans",.12,MUSTARD,False),"num":("sans",.12,NUMCOL,False)}
 SPAN=24.0
+GAP=0.36   # space between caption words, in em of the small style (was 0.22: libass draws words ~2% wider than PIL measures,
+           # plus the outline, so at her smaller 2026-11-11 sizes words touched: "weretaught")
 def hexass(h,a=0): h=h.lstrip("#"); return f"&H{a:02X}{h[4:6]}{h[2:4]}{h[0:2]}&"
 def ts(t): t=max(0,t); return f"{int(t//3600)}:{int(t%3600//60):02d}:{t%60:05.2f}"
 def esc(t): return t.replace("\\","").replace("{","(").replace("}",")")
@@ -234,7 +238,7 @@ def pages(words):
 
 def style_rows(page,S,F):
     """Captions-style wrapping: words fill lines up to the line width; a final keyword gets its own line."""
-    W=S["W"]; em=lambda s: S["sizes"][s]*W; sp=0.22*em("small"); maxl=S["line"]*W
+    W=S["W"]; em=lambda s: S["sizes"][s]*W; sp=GAP*em("small"); maxl=S["line"]*W
     def wl(w,s): e=em(s); return F.pil(STY[s][0],e).getlength(w["w"])-0.017*e*len(w["w"])
     kw_last=bool(page[-1].get("emph")) and len(page)>=2
     body=page[:-1] if kw_last else page
@@ -266,7 +270,7 @@ def layout(page,S,F):
     W,H=S["W"],S["H"]; rows=style_rows(page,S,F)
     em=lambda s: S["sizes"][s]*W; maxw=(1-2*S["pad"])*W
     def wlen(w,s): e=em(s); fsp=-0.017*e; return F.pil(STY[s][0],e).getlength(w["w"])+fsp*len(w["w"]), fsp
-    sp=0.22*em("small")
+    sp=GAP*em("small")
     on_b=any(b["a"]<=page[0]["s"]+0.05<b["b"] for b in S["broll"])
     cy=(S["cap_y_broll"] if on_b else S["cap_y"])*H
     ch=S.get("cap_hook")
@@ -290,7 +294,7 @@ def build(S):
     if S["cap_on"]:
         for a,b,g in paginate(S,F):
             for (w,s,x,bl,e,fsp) in layout(g,S,F):
-                f,_,col,isneg=STY[s]; col=S["colors"].get(s,col); fs=F.fs(f,e); y=bl-F.base(f,e); t=int(max(0,w["s"]-0.04-a)*1000); dx=0.045*W
+                f,_,col,isneg=STY[s]; col=S["colors"].get(s,col); fs=F.fs(f,e); y=bl-F.base(f,e); t=int(max(0,w["s"]-0.04-a)*1000); dx=0.25*e   # slide in from 0.25 em (same as the editor; a fixed 4.5% of the width ran over the previous word at small sizes)
                 ol=S["outline"]*W if not isneg else 0
                 tag=(f"{{\\an7\\move({x-dx:.0f},{y:.0f},{x:.0f},{y:.0f},{t},{t+230})\\fn{FONTS[f][0]}\\fs{fs:.0f}\\fsp{fsp:.1f}"
                      f"\\bord{ol:.1f}\\3c{hexass(S['outline_c'])}\\shad0\\1c{hexass('#FFFFFF' if isneg else col)}\\alpha&HFF&\\t({t},{t+170},\\alpha&H00&)}}")
@@ -574,6 +578,35 @@ def place_hook(pp,dry=False):
     if dry: return
     P.setdefault("hookText",{}).update(y=y,capY=capY,place=pl,auto=True); json.dump(P,open(pp,"w"),indent=1)
 
+def place_accents(pp,dry=False):
+    """Accent words just above her head with the head covering their bottom slightly (Maria, 2026-11-11: in 1108-9 they sat
+    too high; the shared y 0.085 had been set by eye for 1108-4's framing). Her head top is tracked while each accent shows
+    (framing is wide then), the 25th percentile over all of them is used (so most frames have the word touching her hair), and
+    the word's baseline goes a quarter of its letter height below it. Ink of Inter Tight Black: top = y - 0.40 em, baseline =
+    y + 0.41 em (measured). If the word would leave the frame (top under 3% of the height), the size shrinks to fit, down to
+    0.15 of the width; below that the head covers more of it. One shared y/size (accentStyle), so dragging in the editor still
+    moves them all."""
+    import numpy as np
+    P=json.load(open(pp)); S=load(pp); A=accents(S)
+    if not A: print("no accent words"); return
+    W,H=S["W"],S["H"]; tops=[]; sys.path.insert(0,HERE); import thumbnail as TH   # person cut-out (RVM), as for the accent masks
+    ay=H*float(S["p"].get("zoomAnchor",[0.5,0.5])[1])
+    for x in A:   # the face box can't see hair (estimates were off by up to 0.09 of the height between takes); the cut-out can
+        for t in (x["a"]+0.5,(x["a"]+x["b"])/2+0.2,x["b"]-0.1):
+            if any(s_["a"]<=t<s_["b"] for s_ in S["broll"]): continue
+            m=TH.matte(S["src"],t); h_,w_=m.shape; rows=np.where((m[:,int(w_*0.3):int(w_*0.7)]>0.5).any(1))[0]
+            if len(rows): z=zoom_at(S,t); tops.append((ay+(rows[0]/h_*H-ay)*z)/H)
+    if not tops: print("her face isn't on screen during the accents; left as is"); return
+    top=float(np.percentile(tops,25)); st=dict(ACCDEF,**(P.get("accentStyle") or {})); size=float(st.get("size",0.24))
+    F=Fonts(FONTDIR); widest=max((hook_geom(S,F,dict(st,text=x["text"]))[1] for x in A))/W   # em after the fit-the-width rule
+    k=widest/size; em=size*k*W
+    y=top*H+0.25*0.81*em-0.41*em
+    if y-0.40*em<0.03*H:   # no room above her head: smaller, then more overlap
+        em2=max(0.15*W*k,(top*H-0.03*H)/(0.40+0.41-0.25*0.81)); size=round(size*em2/em,3); em=em2; y=max(top*H+0.25*0.81*em-0.41*em,0.03*H+0.40*em)
+    print(f"accents: her head top {top:.3f} (25th pct of {len(tops)} frames over {len(A)} words) -> y {y/H:.3f}, size {size:.3f}")
+    if dry: return
+    P["accentStyle"]=dict(P.get("accentStyle") or {},y=round(y/H,3),size=size); json.dump(P,open(pp,"w"),indent=1)
+
 def hook_spot(pl,bh,gap=0.03):
     """(box centre y, caption y while it shows or None, "above"/"below"). Same rule as the editor's hookSpot."""
     lo,hi=HB_SAFE; free=pl["top"]-gap-lo
@@ -784,12 +817,56 @@ def chunk(pp,wd,n):
         "-pix_fmt","yuv420p","-r",str(fps),"-frames:v",str(nfr),"-colorspace","bt709","-color_primaries","bt709","-color_trc","bt709",os.path.join(wd,f"glo_{n}.mp4")],check=True)
     print(f"chunk {n}/{len(spans(S))-1} ok")
 
+# Sound effects (2026-11-11): project "sfx" = {enabled, volume, cues:[{t, sound, vol, why}]}; t = the moment the sound's
+# loudest point lands on (the accent word arriving, the whip, the B-roll cut), in the clean video's time. Sounds and their
+# hit offsets / level matches are in _agent/sfx/sfx.json (Mixkit files in sfx/mixkit/, self-made fallbacks in sfx/synth/).
+SFXDIR=os.path.join(HERE,"sfx")
+def sfx_lib():
+    M={k:v for k,v in json.load(open(os.path.join(SFXDIR,"sfx.json"))).items() if not k.startswith("_")}
+    for k,v in M.items():
+        if not os.path.exists(os.path.join(SFXDIR,v["file"])): v.update(file=f"synth/{k}.wav",hit=0.0,gain_db=0.0)   # fallback
+    return M
+def sfx_auto(pp,dry=False):
+    """Plan the sound effects (the rules of the 1108-4 demo she approved the volume of): a whoosh as each accent word rises
+    in, a swish on whip zooms, a soft whoosh into each B-roll burst, a pop on list cards, a ka-ching on money amounts, a
+    ding on the comment keyword ("choose"). At most one cue per second (the more important one wins). Her edits in the
+    editor are kept unless she asks for a re-plan."""
+    P=json.load(open(pp)); S=load(pp); C=[]
+    for x in accents(S): C.append((x["a"]+0.3,"whoosh",0.30,f"accent {x['text']}",3))
+    acc=[x["a"] for x in accents(S)]
+    for z in S["zooms"]:
+        if z.get("type")=="beatwhip" and z.get("flash") and not any(abs(z["a"]-a)<0.6 for a in acc): C.append((z["a"],"swish",0.25,"whip",2))
+    prev=-9
+    for sl in sorted(S["broll"],key=lambda s_:s_["a"]):
+        if sl["a"]-prev>0.2: C.append((sl["a"],"whoosh_soft",0.20,f"B-roll {sl['clip']}",1))
+        prev=sl["b"]
+    for tl in S["tiles"]: C.append((tl["a"]+0.1,"pop",0.30,f"card {tl.get('text','')}",3))
+    for w in S["words"]:
+        if w.get("emph")=="num" and "$" in w["w"]: C.append((w["s"],"kaching",0.22,f"money {w['w']}",3))
+        if re.match(r'^["\u201c][^"\u201d]+["\u201d]',w["w"]): C.append((w["s"]+0.1,"ding",0.22,f"comment keyword {w['w']}",4))
+    C.sort(key=lambda c:(-c[4],c[0])); keep=[]
+    for c in C:
+        if all(abs(c[0]-k[0])>=1.0 for k in keep): keep.append(c)
+    cues=[{"t":round(t,3),"sound":n,"vol":v,"why":y} for t,n,v,y,_ in sorted(keep)]
+    for c in cues: print(f"  {c['t']:7.2f}  {c['sound']:<11} {c['why']}")
+    if dry: return
+    P["sfx"]=dict(P.get("sfx") or {"enabled":True,"volume":1.0},cues=cues); json.dump(P,open(pp,"w"),indent=1)
+
 def assemble(pp,wd,out):
     S=load(pp); N=len(spans(S)); lst=os.path.join(wd,"glol.txt"); open(lst,"w").write("".join(f"file 'glo_{n}.mp4'\n" for n in range(N)))
-    SP=float(S["p"].get("speed",1.0) or 1.0)
-    au=["-c:a","copy"] if SP==1 else ["-af",f"atempo={SP}","-c:a","aac","-b:a","192k"]
-    subprocess.run(["ffmpeg","-v","error","-y","-f","concat","-safe","0","-i",lst,"-i",S["src"],"-map","0:v","-map","1:a","-c:v","copy"]+au+
+    SP=float(S["p"].get("speed",1.0) or 1.0); X=S["p"].get("sfx") or {}; cues=[c for c in X.get("cues",[]) if c.get("sound")] if X.get("enabled",True) else []
+    extra=[]; au=["-c:a","copy"] if SP==1 else ["-af",f"atempo={SP}","-c:a","aac","-b:a","192k"]; amap=["-map","1:a"]
+    if cues:   # mix the sound effects under her voice (then speed up the whole mix, so they stay in sync)
+        M=sfx_lib(); g=float(X.get("volume",1.0)); fl=[]
+        for i,c in enumerate(cues):
+            m=M[c["sound"]]; st=max(0,c["t"]-m["hit"]); v=float(c.get("vol",0.25))*g*10**(max(-6,min(6,m["gain_db"]))/20)
+            extra+=["-i",os.path.join(SFXDIR,m["file"])]
+            fl.append(f"[{i+2}:a]aresample=48000,aformat=channel_layouts=stereo,volume={v:.3f},adelay={int(st*1000)}:all=1[s{i}]")
+        fl.append("[1:a]aresample=48000,aformat=channel_layouts=stereo[v];[v]"+"".join(f"[s{i}]" for i in range(len(cues)))+f"amix=inputs={len(cues)+1}:normalize=0:duration=first"+(f",atempo={SP}" if SP!=1 else "")+"[a]")
+        au=["-filter_complex",";".join(fl),"-c:a","aac","-b:a","192k"]; amap=["-map","[a]"]
+    subprocess.run(["ffmpeg","-v","error","-y","-f","concat","-safe","0","-i",lst,"-i",S["src"]]+extra+["-map","0:v"]+amap+["-c:v","copy"]+au+
                     ["-map_metadata","-1","-movflags","+faststart","-shortest",out],check=True)
+    if cues: print(f"sound effects: {len(cues)} mixed in")
     nf=subprocess.run(["ffprobe","-v","error","-count_packets","-select_streams","v","-show_entries","stream=nb_read_packets","-of","csv=p=0",out],capture_output=True,text=True).stdout.strip()
     print("assembled",out,"frames",nf,"expected",round(S["dur"]*S["fps"]/SP),f"(speed {SP}x)")
 
@@ -815,7 +892,9 @@ if __name__=="__main__":
     elif cmd=="chunk": chunk(pp,sys.argv[3],int(sys.argv[4]))
     elif cmd=="hookbox":   # glorious.py hookbox PROJECT OUT.png: the hook text box alone, for checking by eye
         S=load(pp); hb=hook_text(S); hookbox_png(S,sys.argv[3],hb) if hb else print("no hook text in this project")
-    elif cmd=="placehook": place_hook(pp,"--dry" in sys.argv)
+    elif cmd=="placehook": place_hook(pp,"--dry" in sys.argv); place_accents(pp,"--dry" in sys.argv)
+    elif cmd=="placeaccents": place_accents(pp,"--dry" in sys.argv)
+    elif cmd=="sfx": sfx_auto(pp,"--dry" in sys.argv)
     elif cmd=="autozoom":   # plan the zooms (approved Oct 21: Captions-style framing changes every ~1.5s + whips)
         autozoom(pp)
     elif cmd=="anchors":   # fill missing face anchors (fractions) for zooms

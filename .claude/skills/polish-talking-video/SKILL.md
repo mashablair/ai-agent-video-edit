@@ -792,6 +792,8 @@ def remap(projpath,brollpath):
         acc.append(dict(x,a=round(a_,3),b=round(b_,3)))
     if "accents" in B: B["accents"]=acc
     if B.get("whipAt"): B["whipAt"]=[round(mp(t)[0],3) for t in B["whipAt"]]
+    if (B.get("sfx") or {}).get("cues"):   # sound effects (2026-11-11): a cue on cut material is dropped
+        B["sfx"]["cues"]=[dict(c,t=round(mp(c["t"])[0],3)) for c in B["sfx"]["cues"] if innew(_c2r(c["t"],old,oo))]
     B["duration"]=round(on[-1],3); B["status"]="edited"; B["cutKeep"]=new
     W_(brollpath,B); P["renderedKeep"]=new; W_(projpath,P)
     print(f"visuals moved to the new cut ({oo[-1]:.2f}s -> {on[-1]:.2f}s). caption words removed: {lost or 'none'}; added: {added or 'none'}")
