@@ -4,7 +4,7 @@
   Checking: hear WD (re-transcribe the cut audio before rendering) | prof WD A B (raw loudness around a spot)
   Step 2 helper: words CLEAN OUT.json (caption word timings of a clean video)
   One command: render WD (plan..qa) | deliver WD NAME (into Videos/NAME/, never overwrites, + cut project)
-  Cut Editor round trip: cutproject WD NAME [CLEAN] | fromcut PROJECT WD | remap PROJECT BROLLPROJECT | proxy WD NAME | voice WD
+  Cut Editor round trip: cutproject WD NAME [CLEAN] | fromcut PROJECT WD | remap PROJECT BROLLPROJECT | capsync BROLLPROJECT CLEAN OLDKEEP.json | proxy WD NAME | voice WD
 WD = work dir (outside the user's folder). Edits are decided by Claude in WD/edits.json
 (delete_words items may carry a reason: [a,b,"filler"|"restart"|"ramble"|"trim"]) or come from her Cut Editor ("keep" pieces)."""
 import sys, os, json, re, subprocess, math
@@ -645,8 +645,10 @@ def remap(projpath,brollpath):
     inold=lambda x: any(a<=x<b for a,b in old); innew=lambda x: any(a<=x<b for a,b in new)
     words=[]; lost=[]
     for w in B["words"]:
-        mid=_c2r((w["s"]+w["e"])/2,old,oo)
-        if not innew(mid): lost.append(w["w"]+(f" ({w['emph']})" if w.get("emph") else "")); continue
+        # kept if >=0.12 s (or 40% of a short word) of it is still in the new cut; the midpoint test dropped words whose ASR end
+        # time ran into a silence that was then cut (1108-9, 2026-11-11: "give." and "But" vanished from the captions)
+        n=max(1,int((w["e"]-w["s"])*100)); kept=sum(1 for k in range(n) if innew(_c2r(w["s"]+(k+0.5)/100,old,oo)))/100
+        if kept<min(0.12,0.4*n/100): lost.append(w["w"]+(f" ({w['emph']})" if w.get("emph") else "")); continue
         s,_=mp(w["s"]); e,_=mp(w["e"]); words.append(dict(w,s=round(s,3),e=round(max(e,s+0.05),3)))
     added=[]
     for w in P["words"]:
@@ -700,6 +702,32 @@ def deliver(wd,name):
         shutil.move(vs[-1],T); print("moved the older version to",os.path.relpath(f"{T}/{os.path.basename(vs[-1])}",VIDDIR))
     cutproject(wd,name,os.path.relpath(out,VIDDIR))
 
+def capsync(brollpath,clean,oldkeep):
+    """After a re-cut is rendered: listen to the new clean video and fix caption words right at the changed joins (+-0.8 s).
+    A caption word not heard there is dropped, a heard word missing from the captions is added. Elsewhere nothing is touched,
+    so her own caption edits (digits like "$9.5 million", spelling) stay. Timing alone can't tell whether a word whose ASR
+    times straddle a cut survived it (1108-9, 2026-11-11: "give." and "But" dropped, "do" of a cut "learned to do" kept)."""
+    import difflib, tempfile
+    B=J(brollpath); new=B.get("cutKeep") or []; old=J(oldkeep) if isinstance(oldkeep,str) else oldkeep; on=_offs(new)
+    hit=lambda x,ends: any(abs(x-y)<0.005 for y in ends)
+    ch=[on[k+1] for k in range(len(new)-1) if not (hit(new[k][1],[o[1] for o in old]) and hit(new[k+1][0],[o[0] for o in old]))]
+    if not ch: print("captions: no changed joins"); return
+    with tempfile.TemporaryDirectory() as td:
+        sh(["ffmpeg","-v","error","-y","-i",clean,"-vn","-ac","1","-ar","16000",f"{td}/a.wav"]); H=verbatim_words(f"{td}/a.wav")[0]
+    nz=lambda w: re.sub(r"[^a-z0-9]","",w.lower()); near=lambda a,b: any(a-0.8<=t<=b+0.8 for t in ch)
+    C=[w for w in B["words"]]; sm=difflib.SequenceMatcher(None,[nz(w["w"]) for w in C],[nz(h["w"]) for h in H],autojunk=False)
+    drop=set(); add=[]
+    for op,i1,i2,j1,j2 in sm.get_opcodes():
+        if op=="delete":
+            for i in range(i1,i2):
+                if near(C[i]["s"],C[i]["e"]) and not C[i].get("hide"): drop.add(i)
+        elif op=="insert":
+            for j in range(j1,j2):
+                if near(H[j]["s"],H[j]["e"]): add.append({"w":H[j]["w"],"s":round(H[j]["s"],3),"e":round(H[j]["e"],3)})
+    if not drop and not add: print(f"captions match what she says at the {len(ch)} changed joins"); return
+    B["words"]=sorted([w for i,w in enumerate(C) if i not in drop]+add,key=lambda w:w["s"]); W_(brollpath,B)
+    print("captions fixed at changed joins: removed",[C[i]["w"] for i in sorted(drop)] or "none","added",[w["w"] for w in add] or "none")
+
 if __name__=="__main__":
     a=sys.argv[1:]; cmd=a[0]
     if cmd=="setup": setup(a[1] if len(a)>1 else None)
@@ -715,6 +743,7 @@ if __name__=="__main__":
     elif cmd=="cutproject": cutproject(a[1],a[2],a[3] if len(a)>3 else None)
     elif cmd=="fromcut": fromcut(a[1],a[2])
     elif cmd=="remap": remap(a[1],a[2])
+    elif cmd=="capsync": capsync(a[1],a[2],a[3])
     elif cmd=="hear": hear(a[1])
     elif cmd=="words": words(a[1],a[2])
     elif cmd=="prof": prof(a[1],float(a[2]),float(a[3]))

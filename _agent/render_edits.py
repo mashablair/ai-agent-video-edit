@@ -45,6 +45,7 @@ def main(name,dry=False):
         if not os.path.isfile(raw): sys.exit(f"The raw video {C['src']} is gone, so the cut changes can't be rendered. Ask Maria to put it back.")
         wd=fresh(f"{HOME}/vp/{name}_cut")
         print("== cuts ==")
+        json.dump(C.get("renderedKeep") or [],open(f"{wd}/oldkeep.json","w"))   # for capsync: which joins are new
         run(POL,"fromcut",CP,wd); run(POL,"plan",wd,quiet=True); run(POL,"audio",wd,quiet=True)
         n=len(J(f"{wd}/plan.json")["chunks"])
         for k in range(n): run(POL,"chunk",wd,str(k),quiet=True)
@@ -59,6 +60,7 @@ def main(name,dry=False):
         run(POL,"cutproject",wd,name,os.path.relpath(new,VID),quiet=True)
         B=J(BP); C=J(CP); B["video"]=os.path.relpath(new,VID); B["cutKeep"]=C["keep"]; B["duration"]=round(sum(b-a for a,b in C["keep"]),3)
         json.dump(B,open(BP,"w"),indent=1)
+        print(" ",run(POL,"capsync",BP,new,f"{wd}/oldkeep.json",quiet=True).strip().splitlines()[-1])   # listen: caption words at the new joins
         if old!=new: retire(old)
     print("== visuals ==")
     wd=fresh(f"{HOME}/vp/{name}_g")

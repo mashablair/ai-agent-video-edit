@@ -79,6 +79,9 @@ main{display:grid;grid-template-columns:minmax(0,1fr) var(--side,380px);min-heig
 #cutText .why{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#c9a227;margin-right:3px;text-decoration:none;display:inline-block}
 #cutText .jn{display:inline-block;width:9px;height:17px;vertical-align:-3px;margin:0 2px;border-left:2px solid #5a6168;cursor:pointer}
 #cutText .jn:hover,#cutText .jn.on{border-color:var(--accent)}
+#cutText .ps{display:inline-block;font-size:10px;font-weight:700;color:#8fb3c9;background:rgba(143,179,201,.13);border-radius:4px;padding:1px 4px;margin:0 3px 0 0;vertical-align:1px;cursor:pointer;text-decoration:none}
+#cutAct .nud{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--mute);margin-left:6px}#cutAct .nud button{padding:2px 6px;font-size:12px}
+#cutText .ps:hover,#cutText .ps.on{background:var(--accent);color:#111}
 #cutBan{margin:10px 14px 0;padding:8px 10px;border-radius:8px;background:rgba(244,162,97,.12);color:var(--warn);font-size:13px;display:none}
 #paneCap.on,#paneHook.on{display:block}
 #paneHook{overflow:auto;padding:14px;display:none}
@@ -245,7 +248,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padd
       <div id="sideGrip" title="Drag to make the panel wider or narrower (double-click to reset)"></div>
       <div id="tabs"><button data-tab="cut">Cut</button><button data-tab="broll" class="on">B-roll</button><button data-tab="cap">Captions</button><button data-tab="hook">Hook</button></div>
       <div id="paneCut"><div id="cutBan"></div><div id="cutHead"></div><div id="cutAct"></div><div id="cutText"></div>
-        <div class="muted small" style="padding:8px 14px;border-top:1px solid var(--line)">Click a word to jump there. Drag across words to select. <kbd>⌫</kbd> cut · <kbd>R</kbd> restore · click a <span style="border-left:2px solid #5a6168;padding-left:3px">join</span> to shorten or lengthen its pause. Captions and B-roll move with your cuts.</div></div>
+        <div class="muted small" style="padding:8px 14px;border-top:1px solid var(--line)">Click a word to jump there. Drag across words to select. <kbd>⌫</kbd> cut · <kbd>R</kbd> restore · click a <span style="border-left:2px solid #5a6168;padding-left:3px">join</span> to shorten or lengthen its pause · click a <span style="color:#8fb3c9;font-weight:700;font-size:11px">· 0.7s</span> silence to trim it. Captions and B-roll move with your cuts.</div></div>
       <div class="pane on" id="paneBroll">
         <div id="inspector"></div>
         <div id="lib">
@@ -492,7 +495,7 @@ async function loadProject(f){
   S.cutFile=f.replace('_broll_project.json','_cut_project.json');
   try{S.cut=JSON.parse(await (await S.vid.file(S.cutFile)).text());S.sig=await diskSig();S.keep=cloneK(S.proj.cutKeep||S.cut.renderedKeep||S.cut.keep);
     S.rawOK=await S.vid.has(S.cut.src);await main.load(S.cutFile);$('#toast').style.display='none'}catch(e){toast('Couldn’t load this video’s editor files: '+e.message,8000);return}
-  S.csel=null;S.cjoin=null;lastChunk=null;
+  S.csel=null;S.cjoin=null;S.cpause=null;lastChunk=null;
   if(!sameK(S.keep,S.cut.keep)){const r=applyKeep(S.cut.keep,0);S.dirty=true;toast(`Brought in the cuts you saved in the detailed cut editor${r.msg}. Save to keep them.`,8000)}
   renderAll();renderCut();setStatus();applyCapStyle();drawCaption(0);applySpeed();if(S.tab==='hook')renderHookPanel();
 }
@@ -504,7 +507,7 @@ const slots=()=>S.proj?S.proj.slots:[];
 const dur=()=>S.proj?(S.proj.duration||main.duration||0):0;
 function snapshot(){return JSON.stringify({keep:S.keep,duration:S.proj.duration,slots:slots(),captions:S.proj.captions,words:S.proj.words,zooms:S.proj.zooms||[],tiles:S.proj.tiles||[],hookText:S.proj.hookText||null,accents:S.proj.accents||[],accentStyle:S.proj.accentStyle||{},speed:S.proj.speed||1})}
 function pushUndo(){S.undo.push(snapshot());if(S.undo.length>200)S.undo.shift();S.redo=[]}
-function restore(js){const i=S.sel?slots().indexOf(S.sel):-1;const o=JSON.parse(js);if(o.keep&&!sameK(o.keep,S.keep)){S.keep=o.keep;S.proj.duration=o.duration;main.setKeep(S.keep,Math.min(main.currentTime,o.duration));S.csel=null;S.cjoin=null;finalStart()}S.proj.slots=o.slots;S.proj.captions=o.captions;S.proj.words=o.words;S.proj.zooms=o.zooms||[];S.proj.tiles=o.tiles||[];S.proj.hookText=o.hookText||undefined;S.proj.accents=o.accents||[];S.proj.accentStyle=o.accentStyle||{};if(S.tab==='hook')renderHookPanel();if(o.speed&&o.speed!==1)S.proj.speed=o.speed;else delete S.proj.speed;applySpeed();
+function restore(js){const i=S.sel?slots().indexOf(S.sel):-1;const o=JSON.parse(js);if(o.keep&&!sameK(o.keep,S.keep)){S.keep=o.keep;S.proj.duration=o.duration;main.setKeep(S.keep,Math.min(main.currentTime,o.duration));S.csel=null;S.cjoin=null;S.cpause=null;finalStart()}S.proj.slots=o.slots;S.proj.captions=o.captions;S.proj.words=o.words;S.proj.zooms=o.zooms||[];S.proj.tiles=o.tiles||[];S.proj.hookText=o.hookText||undefined;S.proj.accents=o.accents||[];S.proj.accentStyle=o.accentStyle||{};if(S.tab==='hook')renderHookPanel();if(o.speed&&o.speed!==1)S.proj.speed=o.speed;else delete S.proj.speed;applySpeed();
   S.sel=S.proj.slots[i]||null;S.capCache=null;lastChunk=null;$('#capBox').dataset.key='';$('#capTog').checked=!!S.proj.captions.enabled;markDirty();renderCut();applyCapStyle();sync()}
 function beginEdit(){if(S.editing===null&&S.proj)S.editing=snapshot()}
 function endEdit(){if(S.editing!==null){const now=snapshot();if(now!==S.editing){S.undo.push(S.editing);S.redo=[]}S.editing=null;setStatus()}}
@@ -1229,6 +1232,28 @@ function longerK(K,k){const W=CW(),need=0.05,qn=cwordAt(K[k][1]+0.02),lim=Math.m
   let s=K[k+1][0];const pw=cwordAt(s-0.02),lo=Math.max(e,W[pw]&&W[pw].s<s?boundary(pw,pw+1).L:e);
   while(got<need&&s-0.01>=lo&&lvR(s-0.01)<CQUIET){s-=0.01;got+=0.01}
   if(got<0.02)return null;K[k][1]=+e.toFixed(3);K[k+1][0]=+s.toFixed(3);return K}
+/* silences INSIDE a kept piece (2026-11-11, so she doesn't need Detailed cuts to trim one). Quiet = the same rule as polish.py
+   pause_level: 6 dB over the local background (15th percentile over +-5 s), clamped to -42..-34 dB, on a 50 ms median. */
+function quietLevels(){if(S.cut._q)return S.cut._q;const d=S.cut.db,n=d.length,sm=new Float32Array(n),th=new Float32Array(n),pts=[];
+  for(let i=0;i<n;i++){const w=[];for(let j=Math.max(0,i-2);j<=Math.min(n-1,i+2);j++)w.push(d[j]);w.sort((a,b)=>a-b);sm[i]=w[w.length>>1]}
+  for(let i=0;i<n;i+=50){const w=d.slice(Math.max(0,i-500),Math.min(n,i+500)).slice().sort((a,b)=>a-b);pts.push(w[Math.floor(w.length*0.15)])}
+  for(let i=0;i<n;i++){const x=i/50,k=Math.min(pts.length-1,Math.floor(x)),f=Math.min(1,x-k),v=pts[k]+(pts[Math.min(pts.length-1,k+1)]-pts[k])*f;th[i]=Math.min(-34,Math.max(-42,v+6))}
+  return S.cut._q={sm,th}}
+function innerPauses(K,min=0.35){const {sm,th}=quietLevels(),out=[];   // [{a,b}] quiet runs >= min inside each kept piece (a 30 ms blip doesn't break one)
+  for(const [s,e] of K){let st=-1,loud=0;const i0=Math.ceil(s*100),i1=Math.floor(e*100);
+    for(let i=i0;i<=i1;i++){const q=sm[i]<th[i];if(q){if(st<0)st=i;loud=0}else if(st>=0){loud++;if(loud>=3){const b=(i-loud+1)/100;if(b-st/100>=min&&st>i0&&i-loud+1<i1)out.push({a:st/100,b});st=-1;loud=0}}}}
+  return out}
+function squeezeK(K,a,b,keep){const tail=keep*0.6,lead=keep*0.4;if(b-a<=keep+0.03)return null;return subtractK(K,+(a+tail).toFixed(3),+(b-lead).toFixed(3))}
+/* nudge one edge of a join by d seconds (the Detailed cuts edge handles, as buttons; 2026-11-11). side 0 = end of the piece
+   before the join, 1 = start of the piece after it. Never lets the two pieces touch or a piece shrink under 50 ms. */
+function nudgeJoin(k,side,d){const K=S.keep,v=+((side?K[k+1][0]:K[k][1])+d).toFixed(3);
+  if(side===0?(v<=K[k][0]+0.05||v>=K[k+1][0]-0.005||v>S.cut.dur):(v>=K[k+1][1]-0.05||v<=K[k][1]+0.005||v<0)){toast('That edge can’t move further that way.');return}
+  cutEdit(`${side?'Start of after':'End of before'} ${d>0?'+':'−'}${Math.round(Math.abs(d)*1000)} ms`,K=>{
+  if(!K[k+1])return null;const D=S.cut.dur;
+  if(side===0){const v=+(K[k][1]+d).toFixed(3);if(v<=K[k][0]+0.05||v>=K[k+1][0]-0.005||v>D)return null;K[k][1]=v}
+  else{const v=+(K[k+1][0]+d).toFixed(3);if(v>=K[k+1][1]-0.05||v<=K[k][1]+0.005||v<0)return null;K[k+1][0]=v}
+  return K},side?K0(k+1):K0(k,1))}
+const K0=(k,end)=>end?S.keep[k][1]-0.001:S.keep[k][0];
 function shorterK(K,k){const {tail,head}=joinPause(K,k);if(tail+head<0.04)return null;
   if(tail>=head)K[k][1]=+(K[k][1]-Math.min(0.03,tail-0.01)).toFixed(3);else K[k+1][0]=+(K[k+1][0]+Math.min(0.03,head-0.01)).toFixed(3);return K}
 
@@ -1239,7 +1264,9 @@ function remapVisuals(old,nw){const oo=koffs(old),on=koffs(nw),P=S.proj;
   const mp=t=>r2c(c2r(t)),r3=x=>Math.round(x*1000)/1000;
   const inold=x=>pieceIn(old,x)>=0,innew=x=>pieceIn(nw,x)>=0;
   const words=[],lost=[],added=[],flags=[];
-  for(const w of P.words){const mid=c2r((w.s+w.e)/2);if(!innew(mid)){lost.push(w.w);continue}
+  for(const w of P.words){   // kept if >=0.12 s (or 40% of a short word) is still in the cut (same as polish.py remap; the midpoint test lost words whose end ran into a cut silence)
+    const n=Math.max(1,Math.floor((w.e-w.s)*100));let kc=0;for(let k=0;k<n;k++)if(innew(c2r(w.s+(k+0.5)/100)))kc++;
+    if(kc/100<Math.min(0.12,0.4*n/100)){lost.push(w.w);continue}
     const s=mp(w.s)[0],e=mp(w.e)[0];words.push(Object.assign({},w,{s:r3(s),e:r3(Math.max(e,s+0.05))}))}
   for(const w of CW()){const mid=wmid(w);if(innew(mid)&&!inold(mid)){const s=r2c(Math.max(w.s,mid-0.3))[0],e=r2c(Math.min(w.e,mid+0.3))[0];
     words.push({w:w.w,s:r3(s),e:r3(Math.max(e,s+0.05))});added.push(w.w)}}
@@ -1285,19 +1312,27 @@ function renderCut(){if(!S.cut||S.tab!=='cut')return;
   let a='';
   if(S.csel){const {i,j}=S.csel;let nk=0,nc=0;for(let x=i;x<=j;x++)ckept(x)?nk++:nc++;
     a=`<span>“${escH(ctxt(i,j))}”</span>${nk?'<button id="cCut" class="primary">Cut <kbd>⌫</kbd></button>':''}${nc?'<button id="cRes">Restore <kbd>R</kbd></button>':''}`}
-  else if(S.cjoin!=null&&K[S.cjoin+1]){const p=joinPause(K,S.cjoin);a=`<span>Pause at this join: <b>${(p.tail+p.head).toFixed(2)}s</b> of silence</span><button id="jLess">− Shorter</button><button id="jMore">+ Longer</button><button id="jHear">▶ Hear</button>`}
-  else a='<span class="muted">Select words to cut or restore, or click a join.</span>';
+  else if(S.cpause){const p=S.cpause;a=`<span>Silence inside a phrase: <b>${(p.b-p.a).toFixed(2)}s</b></span><button id="pS2" class="primary">→ 0.2s</button><button id="pS4">→ 0.4s</button><button id="pS6" title="a reaction or dramatic beat">→ 0.6s</button><button id="pHear">▶ Hear</button>`}
+  else if(S.cjoin!=null&&K[S.cjoin+1]){const p=joinPause(K,S.cjoin);a=`<span>Pause at this join: <b>${(p.tail+p.head).toFixed(2)}s</b> of silence</span><button id="jLess">− Shorter</button><button id="jMore">+ Longer</button><button id="jHear">▶ Hear</button>
+    <span class="nud" title="Move the end of the piece before the join (− = cut more of it, + = keep more)">End of before: <button data-nd="0,-0.05">−50</button><button data-nd="0,-0.01">−10</button><button data-nd="0,0.01">+10</button><button data-nd="0,0.05">+50</button> ms</span>
+    <span class="nud" title="Move the start of the piece after the join (− = keep more of it, + = cut more)">Start of after: <button data-nd="1,-0.05">−50</button><button data-nd="1,-0.01">−10</button><button data-nd="1,0.01">+10</button><button data-nd="1,0.05">+50</button> ms</span>`}
+  else a='<span class="muted">Select words to cut or restore, or click a join or a silence marker.</span>';
   a+=`<label class="tog" style="margin-left:auto"><input type="checkbox" id="cutHear"${S.cutHear?' checked':''}> Play after each edit</label>`;
   $('#cutAct').innerHTML=a;
   $('#cutHear').onchange=e=>S.cutHear=e.target.checked;
   if($('#cCut'))$('#cCut').onclick=doCut;if($('#cRes'))$('#cRes').onclick=doRestore;
+  if(S.cpause){const p=S.cpause;
+    for(const [id,kp] of [['pS2',0.2],['pS4',0.4],['pS6',0.6]])$('#'+id).onclick=()=>{S.cpause=null;cutEdit(`Silence ${(p.b-p.a).toFixed(2)}s → ${kp}s`,K=>squeezeK(K,p.a,p.b,kp),p.a)};
+    $('#pHear').onclick=()=>{const t=r2eK(S.keep,p.a);seek(Math.max(0,t-1.5));S.playUntil=r2eK(S.keep,p.b)+1.5;main.play()}}
   const k=S.cjoin;
   if($('#jLess'))$('#jLess').onclick=()=>cutEdit('Shorter pause',K=>shorterK(K,k),S.keep[k][1]-0.001);
   if($('#jMore'))$('#jMore').onclick=()=>cutEdit('Longer pause',K=>longerK(K,k),S.keep[k][1]-0.001);
+  $('#cutAct').querySelectorAll('[data-nd]').forEach(b=>b.onclick=()=>{const [side,d]=b.dataset.nd.split(',').map(Number);nudgeJoin(k,side,d)});
   if($('#jHear'))$('#jHear').onclick=()=>{const t=r2eK(S.keep,S.keep[k][1]-0.001);seek(Math.max(0,t-1.5));S.playUntil=t+1.5;main.play()};
   const why={};(S.cut.cuts||[]).forEach(c=>{for(let x=c.a;x<=c.b;x++)why[x]=c.why});
-  let h='<p>',prev=null,run=false,wc=0;
+  let h='<p>',prev=null,run=false,wc=0;const PS=innerPauses(K);let pi=0;
   for(let i=0;i<W.length;i++){const kp=pieceIn(K,wmid(W[i])),sel=S.csel&&i>=S.csel.i&&i<=S.csel.j;
+    while(pi<PS.length&&PS[pi].a+0.03<=W[i].s){if(kp>=0||PS[pi].b<=W[i].s){const p=PS[pi];h+=`<span class="ps${S.cpause&&Math.abs(S.cpause.a-p.a)<0.005?' on':''}" data-a="${p.a}" data-b="${p.b}" title="Silence: click to shorten it">· ${(p.b-p.a).toFixed(1)}s</span>`}pi++}
     if(kp>=0){run=false;if(prev!=null&&kp!==prev)h+=`<span class="jn${S.cjoin===kp-1?' on':''}" data-k="${kp-1}" title="Join: click to change its pause"></span>`;prev=kp}
     else if(!run){run=true;const mine=pieceIn(S.cut.autoKeep||[],wmid(W[i]))>=0;h+=`<span class="why">${mine?'you':escH(why[i]||'cut')}</span>`}
     h+=`<span class="cw${kp<0?' x':''}${sel?' sel':''}" data-i="${i}">${escH(W[i].w)}</span> `;wc++;
@@ -1308,7 +1343,9 @@ function cutNow(t){if(!S.cut)return;const i=cwordAt(main.e2r(t));if(i===S.cnow)r
   if(el){el.classList.add('now');if(!main.paused){const b=$('#cutText'),r=el.getBoundingClientRect(),br=b.getBoundingClientRect();if(r.top<br.top||r.bottom>br.bottom)b.scrollTop+=r.top-br.top-60}}}
 S.cutHear=true;
 let cDown=null;
-$('#cutText').addEventListener('pointerdown',e=>{const jn=e.target.closest('.jn');
+$('#cutText').addEventListener('pointerdown',e=>{const ps=e.target.closest('.ps');
+  if(ps){S.cpause={a:+ps.dataset.a,b:+ps.dataset.b};S.cjoin=null;S.csel=null;main.pause();seek(Math.max(0,r2eK(S.keep,S.cpause.a)-1));renderCut();return}
+  S.cpause=null;const jn=e.target.closest('.jn');
   if(jn){const k=+jn.dataset.k;S.cjoin=k;S.csel=null;main.pause();seek(Math.max(0,r2eK(S.keep,S.keep[k][1]-0.001)-1));renderCut();return}
   const w=e.target.closest('.cw');if(!w)return;const i=+w.dataset.i;cDown={i,moved:false};S.cjoin=null;S.csel={i,j:i};renderCut()});
 $('#cutText').addEventListener('pointerover',e=>{if(!cDown)return;const w=e.target.closest('.cw');if(!w)return;const i=+w.dataset.i;if(i!==cDown.i)cDown.moved=true;
@@ -1345,7 +1382,7 @@ document.addEventListener('keydown',e=>{
   if(mod&&e.key.toLowerCase()==='s'){e.preventDefault();save();return}
   if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}
   if(e.key===' '){e.preventDefault();main.paused?main.play():main.pause();return}
-  if(e.key==='Escape'){if(e.target.blur)e.target.blur();select(null);S.csel=null;S.cjoin=null;renderCut();return}
+  if(e.key==='Escape'){if(e.target.blur)e.target.blur();select(null);S.csel=null;S.cjoin=null;S.cpause=null;renderCut();return}
   if(S.tab==='cut'&&S.csel&&(e.key==='Delete'||e.key==='Backspace')){e.preventDefault();doCut();return}
   if(S.tab==='cut'&&S.csel&&e.key.toLowerCase()==='r'&&!mod){e.preventDefault();doRestore();return}
   if((e.key==='Delete'||e.key==='Backspace')&&S.sel){e.preventDefault();delSel();return}
