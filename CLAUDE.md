@@ -13,7 +13,7 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 |---|---|---|
 | `Drop raw videos here/` | hers | Raw videos she drops in. Never modify, move or delete them; she clears this folder herself. |
 | `Videos/<name>/` | hers (generated) | **Everything made for one video**, so she can delete the whole folder when done: `<name>_clean.mp4`, `_glorious.mp4`, `<code>_thumb_1..3.jpg`, cutlists, transcripts, lists, and `editor files/` (`<code>_cut_project.json`, `<code>_broll_project.json`, `proxy.mp4`, `voice.wav`). `<name>` = the raw file's stem plus a short topic from the transcript, e.g. `1108-4 stop chasing` (her request, 2026-11-13, so she can tell videos apart without opening them). 2-5 plain words, no apostrophes, quotes, colons or slashes (they break ffmpeg filter paths); the raw file keeps its own name and the cut project's `src` points to it. Only the folder, the videos and `<name>_transcript.txt` carry the full name; meta files (projects, cutlist, lists, thumbnails) use the short code: `1108-4_cut_project.json`, `1108-4_thumb_1.jpg`. `render_edits.py` and `thumbnail.py` accept either the code or the full name. Always quote paths (they have spaces). |
-| `Editors/` | hers | `Video Editor.html` (her main editor since 2026-11-04: cuts + B-roll + captions in one, saves both projects), plus `Cut Editor.html` (detailed cut work) and `B-roll Editor.html` (Chrome only; never treat them as videos). They open the main folder and find projects in `Videos/*/editor files/`. Backups in `_agent/editor-backups/`. |
+| `Editors/` | hers | `Video Editor.html` (her main editor since 2026-11-04: cuts + B-roll + captions in one, saves both projects), plus `Cut Editor.html` (detailed cut work). Chrome only; never treat them as videos. They open the main folder and find projects in `Videos/*/editor files/`. Restore a broken one from git. |
 | `_agent/` | agent's, **never deleted** | Scripts (`polish.py`, `glorious.py`, `captions.py`, `rvm_mask.py`), models, fonts, caption presets, text-card refs, `VERSION.txt`, `VIDEO_EDITING_HANDOFF.md`, `tmp/` (superseded versions, backups, `_to_delete/`). Was `_tools/` before 2026-10-27. |
 | `CLAUDE.md`, `AGENTS.md`, `.claude/` | agent's | Must stay at the top level. |
 - Never write generated files anywhere else in her folder (no files at the top level, no `edited/`). If a video has no `Videos/<name>/` yet, create it.
@@ -26,9 +26,9 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 ## Skills (in `.claude/skills/`, tracked in git)
 | She says | Skill |
 |---|---|
+| "process my new videos", "process <video>" (**whole chain**) | `process-videos`: cleanup, then visuals + thumbnail + cover, one reply at the end |
 | "clean up / polish <video>", "render my cuts for <name>" | `polish-talking-video` (step 1: cuts and studio voice only) |
 | "add the visuals / Glorious look to <name>", "render my edits for <name>" | `glorious-visuals` (step 2: captions, zooms, B-roll, hook text with 3 options, accent words, cards, then the thumbnail + cover video; since 2026-11-13 "visuals" always includes the thumbnail). Edits from the Video Editor render with one command: `_agent/render_edits.py <name>` |
-| "just add B-roll to <name>" | `add-broll-to-video` (older, simpler B-roll-only path) |
 | "update the B-roll library" | `update-broll-library` |
 | "make a thumbnail for <name>" (with or without a headline) | `glorious-thumbnail` (step 3, also run automatically at the end of every visuals run: `_agent/thumbnail.py`, 3 options in `Videos/<name>/`) |
 
@@ -43,8 +43,8 @@ Setup is done and the smoke test passed: polish.py through the full chain, and g
   - The loudnorm JSON parse in polish.py now cuts at the closing brace, because ffmpeg 9 prints a stats line after the JSON.
   - polish.py paths: `DEFAULT_TOOLS` → `~/Desktop/AI agent video edit/_agent`, and the legacy-card font → `_agent/fonts/Poppins-ExtraBold.ttf`.
   - `verbatim_words` now guards against a negative start when no silence is found (qa returned an empty transcript on a tightly cut clip).
-- **Fallback copy:** the script embedded in the polish skill is the Mac version too. After changing `_agent/polish.py`, copy it to `~/vidpolish/` and re-sync the embedded copy.
-- **Confirmed on macOS:** the whole cleanup chain incl. `fromcut`/`cutproject`/`deliver`, `render_edits.py`, glorious.py, thumbnail/cover, and `build_clips.py` (33 boat show clips incl. HEIC stills, 2026-10-30). **Still unconfirmed:** `add_broll.py` (old B-roll-only path) and `remap` actually moving visuals (since the Video Editor moves them itself, `render_edits.py` only ever ran it as a no-op; a real run would follow an edit in the separate Cut Editor). Check those closely the first time.
+- **Script copies:** `_agent/polish.py` is the one to run and edit (it's in git); after changing it, `cp _agent/polish.py ~/vidpolish/`. (The copy that used to be embedded in the polish skill was removed 2026-11-13; git is the backup.)
+- **Confirmed on macOS:** the whole cleanup chain incl. `fromcut`/`cutproject`/`deliver`, `render_edits.py`, glorious.py, thumbnail/cover, and `build_clips.py` (33 boat show clips incl. HEIC stills, 2026-10-30). **Still unconfirmed:** `remap` actually moving visuals (since the Video Editor moves them itself, `render_edits.py` only ever ran it as a no-op; a real run would follow an edit in the separate Cut Editor). Check those closely the first time.
 - **Watch for:** in fast speech with no pause between words, the auto-cut edge extension can let a deleted word back in. Read the KEPT TEXT after `plan` and fix any leftovers with `delete_times` at the quietest point.
 
 ## First-run setup on a new Mac (reference)
@@ -68,10 +68,10 @@ Setup is done and the smoke test passed: polish.py through the full chain, and g
 - **Never modify or move her original files.** Deliverables go to `Videos/<name>/` as `<name>_clean.mp4`, `<name>_glorious.mp4` and so on. Never overwrite: add `_v2`, `_v3`. Move superseded versions to `_agent/tmp/`. Don't let video backups pile up there (her rule, 2026-11-04): keep at most the one newest superseded version of each deliverable, and only while that video's `Videos/<name>/` folder still exists; delete older video copies, samples and proxies in `_agent/tmp/` (scripts and JSON backups are tiny, keep them). Also clear `~/vp/` work dirs of videos that are done. Check sizes now and then (`du -sh _agent/tmp ~/vp`).
 - **Don't delete anything in her folders.** Move junk to `_agent/tmp/_to_delete/` (or `_catalog/_to_delete/` in the library) and tell her.
 - Strip all metadata from outputs (`-map_metadata -1`), including the iPhone GPS location.
-- Two separate steps: **step 1 cleanup** (cuts and studio voice only; no captions, zooms, B-roll or cards), then **step 2 visuals**. Never mix them unless she asks.
+- Two separate steps: **step 1 cleanup** (cuts and studio voice only; no captions, zooms, B-roll or cards), then **step 2 visuals**. Never mix them inside one step. Her three commands (2026-11-13): "process <video>" runs both in a row (`process-videos`), "clean up <video>" only step 1, "add visuals to <name>" only step 2.
 - **Normal speed by default.** She speeds things up herself in the editor or in CapCut.
 - **B-roll comes only from her own library.** Never download stock footage, search online or generate footage. Check the most recent usage-log entry and never reuse those clips. Never use the same clip twice in one video. Never use `photo-me-and-bond` unless she asks. Leave out shots with her daughter unless she asks.
-- Deliver one finished result without asking her to approve a plan first. Then reply briefly with a table of what changed, and say where she can tweak it (Cut Editor / B-roll Editor).
+- Deliver one finished result without asking her to approve a plan first. Then reply briefly with a table of what changed, and say where she can tweak it (`Editors/Video Editor.html`, or `Cut Editor.html` for detailed cut work).
 - **Check by looking:** make contact sheets or frame strips of every render and view them, and re-transcribe cleaned audio to catch leftover fillers.
 - Before turning one of her manual edits into a new default (speed, pause length, thresholds), ask her first. Back up a script to `_agent/tmp/` before changing it, and add a line to `_agent/VERSION.txt`.
 
