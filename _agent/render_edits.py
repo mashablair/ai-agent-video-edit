@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render what Maria saved in the Video Editor, in one command:  render_edits.py NAME [--dry]
+"""Render what Maria saved in the Video Editor, in one command:  render_edits.py NAME [--dry]   |   render_edits.py --prune [--dry]
 
 1. Cuts or the background-noise level changed (cut project keep != renderedKeep, noise.level != renderedNoise)? Re-render the clean video from the raw take
    (polish.py fromcut/plan/audio/chunk/assemble/qa), deliver Videos/NAME/NAME_clean_vN.mp4 and refresh the cut project.
@@ -32,6 +32,25 @@ def retire(path):
         os.makedirs(f"{AG}/tmp/superseded",exist_ok=True); dst=f"{AG}/tmp/superseded/{os.path.basename(path)}"
         if os.path.exists(dst): dst=dst[:-4]+f"_{int(time.time())}.mp4"
         shutil.move(path,dst); print("  moved the old version to",os.path.relpath(dst,VID))
+def prune(dry=False):
+    """Her rule (2026-11-04): in _agent/tmp/superseded keep only the newest old copy of each deliverable (clean / glorious / glorious cover)
+    per video, and none once she has deleted that video's folder. Matches by the video's code (1108-4), so copies made before the
+    folders got topic names (2026-11-13) are found too."""
+    T=f"{AG}/tmp/superseded"
+    if not os.path.isdir(T): return
+    codes=sorted({d.split(" ")[0] for d in os.listdir(f"{VID}/Videos") if os.path.isdir(f"{VID}/Videos/{d}")},key=len,reverse=True)
+    groups={}
+    for f in os.listdir(T):
+        if not f.endswith(".mp4"): continue
+        c=next((c for c in codes if f.startswith(c+"_") or f.startswith(c+" ")),None)
+        kind="clean" if "_clean" in f else "cover" if "_cover" in f else "glorious" if "_glorious" in f else None
+        if c is None: groups.setdefault(("gone",f),[]).append(f)
+        elif kind: groups.setdefault((c,kind),[]).append(f)
+    for (c,kind),fs in groups.items():
+        fs.sort(key=lambda f:os.path.getmtime(f"{T}/{f}"))
+        for f in (fs if c=="gone" else fs[:-1]):
+            print(f"  {'would delete' if dry else 'deleted'} superseded {f}" + (" (its video folder is gone)" if c=="gone" else ""))
+            if not dry: os.remove(f"{T}/{f}")
 def fresh(wd):   # the same folder every time (was timestamped and piled up in ~/vp), emptied so nothing stale is reused
     shutil.rmtree(wd,ignore_errors=True); os.makedirs(wd); return wd
 
@@ -102,7 +121,9 @@ def main(name,dry=False):
         open(CAT,"w").write("\n".join(L)+"\n")
     # contact sheet for checking by eye
     run(GLO,"sheet",BP,new,f"{wd}/sheet.jpg")
+    prune()
 
 if __name__=="__main__":
     a=[x for x in sys.argv[1:] if not x.startswith("--")]
-    main(a[0],"--dry" in sys.argv)
+    if "--prune" in sys.argv: prune("--dry" in sys.argv)   # render_edits.py --prune [--dry]: just clean up _agent/tmp/superseded
+    else: main(a[0],"--dry" in sys.argv)

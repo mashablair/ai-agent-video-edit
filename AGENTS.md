@@ -5,10 +5,10 @@ This folder is shared by Claude Code and Codex. **`CLAUDE.md` is the single sour
 ## How to use the Claude-specific parts
 - **Skills:** the workflows live in `.claude/skills/<name>/SKILL.md`. When Maria asks for one of these tasks, open the matching file and follow its steps as plain instructions:
   - `polish-talking-video`: step 1 cleanup ("clean up <video>", "render my cuts for <name>")
-  - `glorious-visuals`: step 2 visuals ("add the Glorious visuals", "render my edits for <name>")
+  - `glorious-visuals`: step 2 visuals ("add the Glorious visuals", "render my edits for <name>"); it always ends with the thumbnail step (3 thumbnails + a `_cover` video that starts on the pick)
   - `add-broll-to-video`: B-roll-only pass
   - `update-broll-library`: catalog new B-roll in `~/Desktop/b-roll collection`
-  - `glorious-thumbnail`: step 3 thumbnails ("make a thumbnail for <name>")
+  - `glorious-thumbnail`: step 3 thumbnails (run at the end of every visuals pass, or alone for "make a thumbnail for <name>")
 - The skills are written for this Mac: run their commands as written (real `~/Desktop/...` paths, `~/vidpolish/.venv/bin/python`) and open the images they mention yourself to check renders.
 - Mentions of Claude's tools (the Read tool, slash commands, `.claude/settings.json`) map to your own equivalents.
 

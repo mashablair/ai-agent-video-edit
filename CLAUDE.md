@@ -4,8 +4,8 @@ This folder is Maria's short-form video pipeline. Raw iPhone talking-head videos
 **Her goal (2026-11-10):** she records a video (scripted or not), drops it in, and Claude does all the work here, including the hook, so she can take the final video and post it. Automate as much as possible and save her time.
 Maria is a senior developer (Angular/TypeScript), so technical detail is fine. In replies, keep the focus on what she needs to watch for or decide.
 
-Deep reference: `_agent/VIDEO_EDITING_HANDOFF.md` is the full technical history: every tool tried, every bug and fix, every approved rule.
-Read the relevant section before changing any script.
+Current reference: the skills in `.claude/skills/` (how each step works) and `_agent/VERSION.txt` (every script change since 2026-10-24, dated, with its reason and backup). Read the VERSION.txt entries for a script before changing it.
+History: `_agent/VIDEO_EDITING_HANDOFF.md` (frozen 2026-10-24: tools tried, early bugs and rules; its paths and pipeline are out of date, the skills win where they disagree).
 
 ## Folders
 Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvious what's hers and what's the agent's; keep it this way):
@@ -23,7 +23,7 @@ Layout of `~/Desktop/AI agent video edit/` (reorganized 2026-10-27 so it's obvio
 - Work directories go in `~/vp/<name>`, never inside her folders.
 - Python tools are installed in `~/vidpolish/` (venv at `~/vidpolish/.venv`).
 
-## Skills (in `.claude/skills/`; on the first run, install them from `_claude-setup/`, see setup step 0)
+## Skills (in `.claude/skills/`, tracked in git)
 | She says | Skill |
 |---|---|
 | "clean up / polish <video>", "render my cuts for <name>" | `polish-talking-video` (step 1: cuts and studio voice only) |
@@ -44,11 +44,11 @@ Setup is done and the smoke test passed: polish.py through the full chain, and g
   - polish.py paths: `DEFAULT_TOOLS` → `~/Desktop/AI agent video edit/_agent`, and the legacy-card font → `_agent/fonts/Poppins-ExtraBold.ttf`.
   - `verbatim_words` now guards against a negative start when no silence is found (qa returned an empty transcript on a tightly cut clip).
 - **Fallback copy:** the script embedded in the polish skill is the Mac version too. After changing `_agent/polish.py`, copy it to `~/vidpolish/` and re-sync the embedded copy.
-- **Not yet confirmed on macOS:** `remap`, `add_broll.py` and `build_clips.py` (cutproject and fromcut ran fine on 2026-11-08). Check them closely the first time they run.
+- **Confirmed on macOS:** the whole cleanup chain incl. `fromcut`/`cutproject`/`deliver`, `render_edits.py`, glorious.py, thumbnail/cover, and `build_clips.py` (33 boat show clips incl. HEIC stills, 2026-10-30). **Still unconfirmed:** `add_broll.py` (old B-roll-only path) and `remap` actually moving visuals (since the Video Editor moves them itself, `render_edits.py` only ever ran it as a no-op; a real run would follow an edit in the separate Cut Editor). Check those closely the first time.
 - **Watch for:** in fast speech with no pause between words, the auto-cut edge extension can let a deleted word back in. Read the KEPT TEXT after `plan` and fix any leftovers with `delete_times` at the quietest point.
 
 ## First-run setup on a new Mac (reference)
-0. Install the Claude Code config (it couldn't be written from the cloud): `mkdir -p .claude/skills && cp -R _claude-setup/skills/* .claude/skills/ && cp _claude-setup/settings.json .claude/settings.json`, then move `_claude-setup/` to `_agent/tmp/`. Tell Maria to restart Claude Code so the skills load.
+0. The Claude Code config (`.claude/skills/`, `.claude/settings.json`) comes with the git clone (github.com/mashablair/ai-agent-video-edit). Check `settings.json` points `additionalDirectories` at the new Mac's `b-roll collection`, then restart Claude Code so the skills load.
 1. `brew install ffmpeg-full && brew unlink ffmpeg; brew link ffmpeg-full` (the plain `ffmpeg` formula lacks the caption filters), then check that the filters exist:
    `ffmpeg -hide_banner -filters | grep -E " (ass|subtitles|zscale|tonemap|arnndn|loudnorm) "`
    If one is missing, stop and tell Maria which one, along with a fix (for example, a fuller ffmpeg build).

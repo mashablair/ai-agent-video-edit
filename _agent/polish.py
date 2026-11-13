@@ -766,7 +766,8 @@ def deliver(wd,name):
     print("delivered",os.path.relpath(out,VIDDIR))
     if vs:
         T=f"{DEFAULT_TOOLS}/tmp/superseded"; os.makedirs(T,exist_ok=True)
-        for f in glob.glob(f"{T}/{name}_clean*.mp4"): os.remove(f)
+        for f in glob.glob(f"{T}/*_clean*.mp4"):   # by code: also finds copies named before the topic rename
+            if re.match(re.escape(code(name))+r"[_ ]",os.path.basename(f)): os.remove(f)
         shutil.move(vs[-1],T); print("moved the older version to",os.path.relpath(f"{T}/{os.path.basename(vs[-1])}",VIDDIR))
     cutproject(wd,name,os.path.relpath(out,VIDDIR))
 

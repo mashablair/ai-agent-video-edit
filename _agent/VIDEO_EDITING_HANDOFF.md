@@ -2,6 +2,8 @@
 **Automated short-form video editing for Glorious Goddess (GG) / MariaTalksTech (MTT)**
 Technical handoff from Claude to ChatGPT Work / Codex. Prepared 2026-10-24.
 
+> **History, frozen at 2026-10-24.** Useful for why things are the way they are (tools tried, bugs, early rules), but its paths (`_tools/`, `edited/`) and its pipeline are out of date: no Video Editor, hook text, accent words, thumbnails/covers, noise levels or topic folder names. For how things work **now**, use CLAUDE.md, the skills in `.claude/skills/`, and the dated change log `_agent/VERSION.txt`. Where this file disagrees with them, they win.
+
 ---
 
 ## 0. Read this first

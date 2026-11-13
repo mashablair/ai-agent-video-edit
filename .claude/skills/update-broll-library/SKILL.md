@@ -5,7 +5,7 @@ description: "Catalog new B-roll videos and photos Maria adds to her 'b-roll col
 
 # Update the B-roll library
 
-Maria adds raw videos and photos (.mov, .MOV, .heic, .jpg, .png) to `~/Desktop/b-roll collection`, and sometimes deletes raw files that were already processed. She never touches `clips/` or `_catalog/`. Process only what's new.
+Maria adds raw videos and photos (.mov, .MOV, .heic, .jpg, .png) to `~/Desktop/b-roll collection`, and sometimes deletes raw files that were already processed. She also reviews `clips/` directly: she **deletes** clips she doesn't like and **renames** clips whose name misreads the scene (2026-10-30, 2026-11-07). She never touches `_catalog/`. Process only what's new.
 
 ## Where things are (this Mac)
 - `~/Desktop/b-roll collection/` (run the catalog scripts from there; it's an extra working directory of this project)
@@ -21,6 +21,11 @@ Maria adds raw videos and photos (.mov, .MOV, .heic, .jpg, .png) to `~/Desktop/b
 - Deleting is off in her folders; move junk to `_catalog/_to_delete/`.
 
 ## Steps
+0. **Sync with what she changed in `clips/`** (always first; otherwise `build_clips.py` rebuilds clips she deleted):
+   - Compare the `.mp4` names in `clips/` with the ids in `clips.json`.
+   - An id with no file and a file with no id at the same time usually means she **renamed** it: match the new file to the old id by comparing its frames with `_catalog/thumbs/<old id>.jpg`, then update the id, scene, mood and tags (her name tells you what the clip really shows; stock conflict scenes matter for her unhappy-relationship content), rename the thumb, and replace the old id in CATALOG.md (theme finder included) and in any video project that uses it.
+   - An id with no file and no new file means she **deleted** it: remove the entry from clips.json, move its thumb to `_catalog/_to_delete/`, take it out of the theme finder and tables, and list it under "Skipped footage" ("she deleted after review, don't re-cut").
+   - Back up `clips.json` and `CATALOG.md` to `_catalog/_to_delete/<name>_before_<change>_<date>` first.
 1. **List new sources:** files not under "Sources already processed" in CATALOG.md.
    - Check for duplicates (same size and creation date as a processed file, or names like `X 2.mov`) and skip them.
 2. **Probe each video** for duration, size, rotation, fps and color_transfer. If it's `arib-std-b67` or `smpte2084` it's HDR: set `"hdr": true` so it gets tone-mapped.
@@ -39,5 +44,6 @@ Maria adds raw videos and photos (.mov, .MOV, .heic, .jpg, .png) to `~/Desktop/b
    - Regenerate the tables from clips.json and extend the theme finder.
    - Add the new sources to "Sources already processed" and note anything skipped.
    - Keep the usage log exactly as it was.
+   - **Write safely** (on 2026-11-08 a one-liner `open(C,'w').write(open(C).read()+...)` emptied the file before reading it and wiped everything but the log): read the file into a variable first, build the new text, check it still has `## Theme finder`, `## Sources already processed`, `## Skipped footage` and `## Usage log` and is not shorter than before except for clips you removed, then write. Every clips.json id must appear in the tables.
    - Regenerate `catalog_overview.jpg` from `thumbs/`.
 10. **Reply briefly:** how many clips were added, the highlights, what was skipped and why, and anything she needs to decide.
