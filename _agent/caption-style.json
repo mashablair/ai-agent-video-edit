@@ -30,12 +30,12 @@
  "gShadowBlur": 0.004,
  "gShadowOpacity": 0.65,
  "gSizes": {
-  "small": 0.052,
-  "big": 0.084,
-  "neg": 0.102,
-  "serif": 0.14,
-  "script": 0.15,
-  "yellow": 0.12
+  "small": 0.044,
+  "big": 0.066,
+  "neg": 0.092,
+  "serif": 0.112,
+  "script": 0.128,
+  "yellow": 0.11
  },
  "gLine": 0.72,
  "gScriptColor": "#F2EC2E",

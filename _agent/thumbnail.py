@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Glorious Goddess thumbnail maker (step 3 of the pipeline).
 usage: thumbnail.py NAME --headline "He just didn't *choose* you 🙄" [--n 3] [--at SEC ...]
-  NAME = a folder in Videos/ (uses Videos/NAME/NAME_clean.mp4); a video path also works (then --out DIR).
+  NAME = a folder in Videos/ (uses the newest Videos/NAME/NAME_clean[_vN].mp4); a video path also works (then --out DIR).
   *words* = blush italic accent; "|" forces a line break (otherwise lines are balanced automatically, at most 3).
-  Writes Videos/NAME/NAME_thumb_1..3.jpg at the video's own resolution (next set _v2, _v3; never overwrites),
-  NAME_thumb_list.txt, and a side-by-side check image in ~/vp/NAME/thumb_compare.jpg.
+  Writes Videos/NAME/CODE_thumb_1..3.jpg (CODE = NAME up to the first space, e.g. 1108-4) at the video's own resolution (next set _v2, _v3; never overwrites),
+  CODE_thumb_list.txt, and a side-by-side check image in ~/vp/NAME/thumb_compare.jpg.
 Look (approved 2026-11-08, from a GPT render she liked): her face big with the whole head in frame, crisp warm grade,
 huge DM Serif Display in cream with the accent in blush italic, inside a stepped dark box low in the frame."""
 import argparse, json, os, re, subprocess, sys, urllib.request
@@ -189,7 +189,7 @@ def outputs(name, outdir, n):
     """Never overwrite: first set NAME_thumb_1..n, then NAME_thumb_v2_1..n, ..."""
     for v in range(1, 100):
         tag = "" if v == 1 else f"_v{v}"
-        files = [os.path.join(outdir, f"{name}_thumb{tag}_{i+1}.jpg") for i in range(n)]
+        files = [os.path.join(outdir, f"{name.split(' ')[0]}_thumb{tag}_{i+1}.jpg") for i in range(n)]
         if not any(os.path.exists(f) for f in files): return tag, files
     sys.exit("too many versions")
 
@@ -199,19 +199,23 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=3); ap.add_argument("--at", type=float, nargs="*")
     g = ap.parse_args()
     if os.path.isfile(g.video):
-        video = g.video; name = os.path.splitext(os.path.basename(video))[0].replace("_clean", "")
+        video = g.video; name = re.sub(r"_clean(_v\d+)?$", "", os.path.splitext(os.path.basename(video))[0])
         outdir = g.out or os.path.dirname(os.path.abspath(video))
     else:
-        name = g.video; outdir = g.out or os.path.join(ROOT, "Videos", name)
-        video = os.path.join(ROOT, "Videos", name, f"{name}_clean.mp4")
-        if not os.path.isfile(video): sys.exit(f"no clean video at {video} (run step 1 first)")
+        m = [d for d in os.listdir(os.path.join(ROOT, "Videos")) if d == g.video or d.split(" ")[0] == g.video]   # "1108-4" or the full folder name
+        if len(m) != 1: sys.exit(f"no single video folder for {g.video!r} in Videos/: {m}")
+        name = m[0]; outdir = g.out or os.path.join(ROOT, "Videos", name)
+        cands = {0 if m.group(1) is None else int(m.group(1)): f for f in os.listdir(outdir)   # newest NAME_clean[_vN].mp4
+                 for m in [re.fullmatch(re.escape(name) + r"_clean(?:_v(\d+))?\.mp4", f)] if m} if os.path.isdir(outdir) else {}
+        if not cands: sys.exit(f"no clean video in {outdir} (run step 1 first)")
+        video = os.path.join(outdir, cands[max(cands)])
     W, H = size(video); K = W/1080; os.makedirs(outdir, exist_ok=True)
     times = g.at or [r["t"] for r in pick(score_frames(video), g.n)]
     tag, files = outputs(name, outdir, len(times))
     res = [make(video, t, g.headline, f) for t, f in zip(times, files)]
     wd = os.path.expanduser(f"~/vp/{name}"); os.makedirs(wd, exist_ok=True)
     cv2.imwrite(os.path.join(wd, f"thumb{tag}_compare.jpg"), np.hstack([cv2.resize(cv2.imread(r["file"]), (360, 640)) for r in res]))
-    with open(os.path.join(outdir, f"{name}_thumb{tag}_list.txt"), "w") as fh:
+    with open(os.path.join(outdir, f"{name.split(' ')[0]}_thumb{tag}_list.txt"), "w") as fh:
         fh.write(f"Headline: {g.headline}\nVideo: {os.path.basename(video)}\n")
         for r in res:
             m, s_ = divmod(r["t"], 60)

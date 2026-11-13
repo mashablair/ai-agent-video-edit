@@ -23,6 +23,7 @@ Deliver ONE finished cleaned video without asking her to approve a first test.
 
 ## Steps
 In the commands, `PY=~/vidpolish/.venv/bin/python`, `POL=_agent/polish.py`, `WD=~/vp/<name>`.
+0. **Name the video** (her rule, 2026-11-13): `<name>` = raw stem + a short topic you take from the transcript, e.g. `1108-4 stop chasing` (2-5 plain words; no apostrophes, quotes, colons or slashes). Use the full `<name>` for the folder `Videos/<name>/`, the videos (`<name>_clean.mp4`, `_glorious`, `_cover`) and `<name>_transcript.txt`; every other file (cut/broll projects, cutlist, list .txt, thumbnails) is prefixed with just `<code>` = the raw stem (`1108-4_cut_project.json`, her rule 2026-11-13; polish.py, render_edits.py and thumbnail.py do this themselves). Quote every path. Transcribe first if you need the topic, then name it before `deliver`.
 1. **Transcribe.** `$PY $POL transcribe "Drop raw videos here/<file>" $WD`. It prints an indexed word list (`idx:word@start [gap]`) plus FILLERS and REPEATS lists. Parakeet DOES transcribe "uh/um". With several new videos, transcribe them all first, then decide each one's cuts.
 2. **Decide the cuts yourself** by reading the transcript like a viewer (see "Editing rules"), then write `$WD/edits.json`:
    ```json
@@ -45,8 +46,8 @@ In the commands, `PY=~/vidpolish/.venv/bin/python`, `POL=_agent/polish.py`, `WD=
    Also read the HEARD text like a viewer: words that crept back from a cut, broken grammar, a sliver ("I'm s… when" = a half-kept "sometimes").
    To place a fix, `$PY $POL prof $WD <a> <b>` prints the raw loudness every 20 ms around a spot, the words and kept pieces there, and the quietest points; put a `delete_times` edge at the quiet point right before the kept word. To keep a sliver's whole word instead, shrink the `delete_words` range. Re-run `plan`, `audio`, `hear` until it reads clean. This loop is cheap (seconds); the video render is not.
 5. **Render.** `$PY $POL render $WD` runs plan, audio, every chunk, assemble (`$WD/final.mp4`; the frame count must say OK) and qa (the same report as `hear`, on the final video, plus `$WD/_qa_frames.jpg`). View the contact sheet. Rendering is frame-exact (each piece gets exactly its share of frames, so video never drifts from the audio). Several videos: render them one after another in one background command.
-6. **Deliver.** `$PY $POL deliver $WD <name>`: copies `final.mp4` to `Videos/<name>/<name>_clean.mp4` (or the next `_vN`; never overwrites; an older clean video moves to `_agent/tmp/superseded/`, keeping only the newest), copies the cut list next to it, and writes the cut project (`Videos/<name>/editor files/<name>_cut_project.json` + proxy + studio-voice audio; about 45 s) so she can fix cuts herself. Then write by hand:
-   - in `<name>_cutlist.txt`: a "Kept on purpose:" note (kept beats, anything left in on purpose, anything odd in her raw),
+6. **Deliver.** `$PY $POL deliver $WD <name>`: copies `final.mp4` to `Videos/<name>/<name>_clean.mp4` (or the next `_vN`; never overwrites; an older clean video moves to `_agent/tmp/superseded/`, keeping only the newest), copies the cut list next to it, and writes the cut project (`Videos/<name>/editor files/<code>_cut_project.json` + proxy + studio-voice audio; about 45 s) so she can fix cuts herself. Then write by hand:
+   - in `<code>_cutlist.txt`: a "Kept on purpose:" note (kept beats, anything left in on purpose, anything odd in her raw),
    - `<name>_transcript.txt`: a clean, punctuated transcript of the edited version, fixing ASR misspellings such as "MASH.com" for Match.com, "breath crumbing" for breadcrumbing, "faith" where she means fate. Put punctuation outside the quotes of a comment keyword: comment "choose", not "choose," (it triggers her ManyChat automation). Step 2 (captions, B-roll) can use it.
 7. **Reply briefly**: a table of old length to new length and what was cut, anything she should listen for, and always end with how to fix a cut: **"If anything sounds off, open `Editors/Video Editor.html` (or `Cut Editor.html`), pick <name>, fix it, Save, and tell me “render my cuts for <name>”."** When done, clear `~/vp` work dirs of videos that are finished (`du -sh ~/vp`).
 
@@ -60,9 +61,9 @@ In the commands, `PY=~/vidpolish/.venv/bin/python`, `POL=_agent/polish.py`, `WD=
 
 ## "Render my cuts for <name>"
 If she edited in the Video Editor (`Editors/Video Editor.html`; the visuals project has `cutKeep`), use the glorious-visuals skill's one command, `_agent/render_edits.py <name>`, instead: it renders the cuts and the visuals together. The steps below are for a cut-only edit (no visuals yet, or the separate Cut Editor).
-1. Read `Videos/<name>/editor files/<name>_cut_project.json` (status should be `edited`; `rendered` means nothing new was saved). Compare `keep` with `renderedKeep` so you can tell her what changed (which joins moved, words cut or restored). The raw video must still be in `Drop raw videos here/`; if it's gone, ask her to put it back.
-2. `$PY $POL fromcut "Videos/<name>/editor files/<name>_cut_project.json" ~/vp/<name>_cut` (a work dir with her exact pieces), then `$PY $POL render ~/vp/<name>_cut`. Her cuts are rendered as-is; don't "improve" them. If qa lists a leftover filler or gap, mention it rather than cutting it.
-3. **If a visuals project exists** (`Videos/<name>/editor files/<name>_broll_project.json`), do this BEFORE step 4 (it needs the old `renderedKeep`): `$PY $POL remap "Videos/<name>/editor files/<name>_cut_project.json" "Videos/<name>/editor files/<name>_broll_project.json"`. It moves caption words, B-roll slots, cards, zooms and the hook from the old clean timeline to the new one (backup in `_agent/tmp/`), drops caption words that were cut, adds restored words, and flags slots/cards whose edges landed on cut material. Set the visuals project's `video` to the new clean file, tell her what moved or was flagged, and offer to re-render the Glorious version.
+1. Read `Videos/<name>/editor files/<code>_cut_project.json` (status should be `edited`; `rendered` means nothing new was saved). Compare `keep` with `renderedKeep` so you can tell her what changed (which joins moved, words cut or restored). The raw video must still be in `Drop raw videos here/`; if it's gone, ask her to put it back.
+2. `$PY $POL fromcut "Videos/<name>/editor files/<code>_cut_project.json" ~/vp/<name>_cut` (a work dir with her exact pieces), then `$PY $POL render ~/vp/<name>_cut`. Her cuts are rendered as-is; don't "improve" them. If qa lists a leftover filler or gap, mention it rather than cutting it.
+3. **If a visuals project exists** (`Videos/<name>/editor files/<code>_broll_project.json`), do this BEFORE step 4 (it needs the old `renderedKeep`): `$PY $POL remap "Videos/<name>/editor files/<code>_cut_project.json" "Videos/<name>/editor files/<code>_broll_project.json"`. It moves caption words, B-roll slots, cards, zooms and the hook from the old clean timeline to the new one (backup in `_agent/tmp/`), drops caption words that were cut, adds restored words, and flags slots/cards whose edges landed on cut material. Set the visuals project's `video` to the new clean file, tell her what moved or was flagged, and offer to re-render the Glorious version.
 4. `$PY $POL deliver ~/vp/<name>_cut <name>`: the next `<name>_clean_vN.mp4`, the old one to `_agent/tmp/superseded/`, and the cut project refreshed (keeps Claude's reasons and first cut; sets `renderedKeep` and status `rendered`). Add a `<name>_transcript_vN.txt` if the words changed.
 5. Reply with a short table of what changed and the new length.
 
@@ -719,6 +720,8 @@ def prof(wd,a,b,step=0.02):
 
 # ---------------- Cut Editor round trip ----------------
 VIDDIR=os.path.dirname(DEFAULT_TOOLS)   # her "AI agent video edit" folder
+def code(name): return name.split(" ")[0]   # "1108-4 stop chasing" -> "1108-4": the prefix of the meta files (projects, cutlist, lists, thumbnails); videos and the transcript use the full name (her rule, 2026-11-13)
+
 def edfiles(name):   # one folder per video: Videos/<name>/ (deliverables) and Videos/<name>/editor files/ (projects, proxy, voice)
     d=f"{VIDDIR}/Videos/{name}/editor files"; os.makedirs(d,exist_ok=True); return d
 FILLERS={"um","uh","umm","uhm","hmm","mm","er","ah","erm"}
@@ -745,12 +748,12 @@ def proxy(wd,name):
     print("proxy ok",out)
 
 def cutproject(wd,name,clean=None):
-    """Write Videos/<name>/editor files/<name>_cut_project.json for the Cut Editor (raw-time words, loudness, Claude's cuts with reasons, the kept pieces)."""
+    """Write Videos/<name>/editor files/<code>_cut_project.json for the Cut Editor (raw-time words, loudness, Claude's cuts with reasons, the kept pieces)."""
     import shutil
     M=J(f"{wd}/meta.json"); D=J(f"{wd}/words.json"); P=J(f"{wd}/plan.json")
     E=J(f"{wd}/edits.json") if os.path.exists(f"{wd}/edits.json") else {}
     W=D["words"]; cd=edfiles(name)
-    pj=f"{cd}/{name}_cut_project.json"; old=J(pj) if os.path.exists(pj) else {}
+    pj=f"{cd}/{code(name)}_cut_project.json"; old=J(pj) if os.path.exists(pj) else {}
     noise=voices(wd,cd,old)
     if not os.path.exists(f"{cd}/proxy.mp4"): proxy(wd,name)
     db=db10(f"{wd}/a16.wav") if os.path.exists(f"{wd}/a16.wav") else old["db"]; keep=[[round(g["s"],4),round(g["e"],4)] for g in P["segs"]]
@@ -882,7 +885,7 @@ def deliver(wd,name):
     D=f"{VIDDIR}/Videos/{name}"; os.makedirs(D,exist_ok=True)
     vs=sorted(glob.glob(f"{D}/{name}_clean.mp4")+glob.glob(f"{D}/{name}_clean_v*.mp4"),key=lambda f:int((re.findall(r"_v(\d+)\.mp4$",f) or [1])[0]))
     v=int((re.findall(r"_v(\d+)\.mp4$",vs[-1]) or [1])[0])+1 if vs else 1; sfx=f"_v{v}" if v>1 else ""
-    out=f"{D}/{name}_clean{sfx}.mp4"; shutil.copy(f"{wd}/final.mp4",out); shutil.copy(f"{wd}/cutlist.txt",f"{D}/{name}_cutlist{sfx}.txt")
+    out=f"{D}/{name}_clean{sfx}.mp4"; shutil.copy(f"{wd}/final.mp4",out); shutil.copy(f"{wd}/cutlist.txt",f"{D}/{code(name)}_cutlist{sfx}.txt")
     print("delivered",os.path.relpath(out,VIDDIR))
     if vs:
         T=f"{DEFAULT_TOOLS}/tmp/superseded"; os.makedirs(T,exist_ok=True)

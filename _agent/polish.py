@@ -597,6 +597,8 @@ def prof(wd,a,b,step=0.02):
 
 # ---------------- Cut Editor round trip ----------------
 VIDDIR=os.path.dirname(DEFAULT_TOOLS)   # her "AI agent video edit" folder
+def code(name): return name.split(" ")[0]   # "1108-4 stop chasing" -> "1108-4": the prefix of the meta files (projects, cutlist, lists, thumbnails); videos and the transcript use the full name (her rule, 2026-11-13)
+
 def edfiles(name):   # one folder per video: Videos/<name>/ (deliverables) and Videos/<name>/editor files/ (projects, proxy, voice)
     d=f"{VIDDIR}/Videos/{name}/editor files"; os.makedirs(d,exist_ok=True); return d
 FILLERS={"um","uh","umm","uhm","hmm","mm","er","ah","erm"}
@@ -623,12 +625,12 @@ def proxy(wd,name):
     print("proxy ok",out)
 
 def cutproject(wd,name,clean=None):
-    """Write Videos/<name>/editor files/<name>_cut_project.json for the Cut Editor (raw-time words, loudness, Claude's cuts with reasons, the kept pieces)."""
+    """Write Videos/<name>/editor files/<code>_cut_project.json for the Cut Editor (raw-time words, loudness, Claude's cuts with reasons, the kept pieces)."""
     import shutil
     M=J(f"{wd}/meta.json"); D=J(f"{wd}/words.json"); P=J(f"{wd}/plan.json")
     E=J(f"{wd}/edits.json") if os.path.exists(f"{wd}/edits.json") else {}
     W=D["words"]; cd=edfiles(name)
-    pj=f"{cd}/{name}_cut_project.json"; old=J(pj) if os.path.exists(pj) else {}
+    pj=f"{cd}/{code(name)}_cut_project.json"; old=J(pj) if os.path.exists(pj) else {}
     noise=voices(wd,cd,old)
     if not os.path.exists(f"{cd}/proxy.mp4"): proxy(wd,name)
     db=db10(f"{wd}/a16.wav") if os.path.exists(f"{wd}/a16.wav") else old["db"]; keep=[[round(g["s"],4),round(g["e"],4)] for g in P["segs"]]
@@ -760,7 +762,7 @@ def deliver(wd,name):
     D=f"{VIDDIR}/Videos/{name}"; os.makedirs(D,exist_ok=True)
     vs=sorted(glob.glob(f"{D}/{name}_clean.mp4")+glob.glob(f"{D}/{name}_clean_v*.mp4"),key=lambda f:int((re.findall(r"_v(\d+)\.mp4$",f) or [1])[0]))
     v=int((re.findall(r"_v(\d+)\.mp4$",vs[-1]) or [1])[0])+1 if vs else 1; sfx=f"_v{v}" if v>1 else ""
-    out=f"{D}/{name}_clean{sfx}.mp4"; shutil.copy(f"{wd}/final.mp4",out); shutil.copy(f"{wd}/cutlist.txt",f"{D}/{name}_cutlist{sfx}.txt")
+    out=f"{D}/{name}_clean{sfx}.mp4"; shutil.copy(f"{wd}/final.mp4",out); shutil.copy(f"{wd}/cutlist.txt",f"{D}/{code(name)}_cutlist{sfx}.txt")
     print("delivered",os.path.relpath(out,VIDDIR))
     if vs:
         T=f"{DEFAULT_TOOLS}/tmp/superseded"; os.makedirs(T,exist_ok=True)

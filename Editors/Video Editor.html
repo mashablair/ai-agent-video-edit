@@ -433,7 +433,7 @@ if(!canPick)$('#fbNote').style.display='block';
 
 /* each video's editor files live in Videos/<name>/editor files/ */
 async function findProjects(fs,suffix){const out=[];for(const d of (await fs.dirs('Videos')).sort()){let fl=[];try{fl=await fs.list('Videos/'+d+'/editor files')}catch{}for(const n of fl)if(n.endsWith(suffix))out.push('Videos/'+d+'/editor files/'+n)}return out}
-const pname=(f,suffix)=>f.split('/').pop().replace(suffix,'');
+const pname=(f,suffix)=>f.split('/').at(-3)||f.split('/').pop().replace(suffix,'');   // the video's folder name ("1108-4 stop chasing"); project files are named by code only
 async function useFS(which,fs){
   const ok= which==='vid' ? (await fs.dirs('Videos').then(()=>true).catch(()=>false)) : await fs.has('_catalog/clips.json');
   if(!ok){toast(which==='vid'?'That folder has no “Videos” folder inside. Choose “AI agent video edit”.':'That folder has no _catalog/clips.json. Choose “b-roll collection”.',5000);return false}

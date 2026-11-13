@@ -6,7 +6,8 @@
    The visuals were already moved to the new cut by the editor (broll project "cutKeep"); polish.py remap only
    moves them when they still sit on the old cut (e.g. after an edit in the old Cut Editor).
 2. Render the Glorious video (glorious.py plan/chunk/assemble) and deliver Videos/NAME/NAME_glorious_vN.mp4.
-3. Superseded versions go to _agent/tmp/superseded/, the usage-log line in CATALOG.md is refreshed, and a contact
+3. The cover video (NAME_glorious_vN_cover.mp4, the file she posts) is rebuilt with the thumbnail picked in the broll project's "thumb".
+4. Superseded versions (old covers too) go to _agent/tmp/superseded/, the usage-log line in CATALOG.md is refreshed, and a contact
    sheet (one frame per B-roll slot plus a few on her face) is written to the work dir for checking.
 Work dirs: ~/vp/NAME_cut and ~/vp/NAME_g, one per video, emptied at the start of each render (no stale chunks or hook masks)."""
 import sys, os, json, re, glob, shutil, subprocess, time, datetime
@@ -35,7 +36,10 @@ def fresh(wd):   # the same folder every time (was timestamped and piled up in ~
     shutil.rmtree(wd,ignore_errors=True); os.makedirs(wd); return wd
 
 def main(name,dry=False):
-    D=f"{VID}/Videos/{name}"; ED=f"{D}/editor files"; CP=f"{ED}/{name}_cut_project.json"; BP=f"{ED}/{name}_broll_project.json"
+    m=[d for d in os.listdir(f"{VID}/Videos") if d==name or d.split(" ")[0]==name]   # "1108-4" or "1108-4 stop chasing"
+    if len(m)!=1: sys.exit(f"no single video folder for {name!r} in Videos/: {m}")
+    name=m[0]; c=name.split(" ")[0]
+    D=f"{VID}/Videos/{name}"; ED=f"{D}/editor files"; CP=f"{ED}/{c}_cut_project.json"; BP=f"{ED}/{c}_broll_project.json"
     C=J(CP); B=J(BP)
     cut_changed=not same(C["keep"],C.get("renderedKeep"))
     lv,rlv=(C.get("noise") or {}).get("level","standard"),C.get("renderedNoise","standard"); noise_changed=lv!=rlv
@@ -77,10 +81,19 @@ def main(name,dry=False):
     B["status"]="rendered"; B["rendered"]=os.path.relpath(new,VID); json.dump(B,open(BP,"w"),indent=1)
     C=J(CP)
     if C.get("status")=="edited" and same(C["keep"],C.get("renderedKeep")) and (C.get("noise") or {}).get("level","standard")==C.get("renderedNoise","standard"): C["status"]="rendered"; json.dump(C,open(CP,"w"))
-    if old and old!=new: retire(old)
+    if old and old!=new:
+        for f in glob.glob(old[:-4]+"_cover*.mp4"): retire(f)
+        retire(old)
+    # the file she posts always starts on the thumbnail (her rule, 2026-11-13): rebuild the cover video with the picked one
+    th=os.path.join(VID,B["thumb"]) if B.get("thumb") else None
+    if th and os.path.isfile(th): print("  delivered",os.path.relpath(run(f"{AG}/cover.py",new,th,quiet=True).strip().splitlines()[0],VID),"(starts on",os.path.basename(th)+")")
+    else: print("  NO COVER: no thumbnail picked for this video yet (broll project \"thumb\"); make one with the glorious-thumbnail step")
     # usage log: replace this video's line, keep its topic
-    if os.path.isfile(CAT):
-        L=open(CAT).read().rstrip("\n").split("\n"); clips=", ".join(s["clip"] for s in sorted(B["slots"],key=lambda s:s["a"]))
+    txt=open(CAT).read() if os.path.isfile(CAT) else ""
+    if txt and ("## Theme finder" not in txt or "## Usage log" not in txt):   # never rewrite a damaged catalog (it was cut down to the log on 2026-11-08)
+        print("  USAGE LOG NOT UPDATED: CATALOG.md is missing its Theme finder or Usage log section; restore it first")
+    elif txt:
+        L=txt.rstrip("\n").split("\n"); clips=", ".join(s["clip"] for s in sorted(B["slots"],key=lambda s:s["a"]))
         stem=os.path.basename(B["video"])[:-4]; pat=re.compile(rf"^- (\d{{4}}-\d\d-\d\d), {re.escape(name)}(_clean\S*)? (\(.*?\)):")
         for i in range(len(L)-1,-1,-1):
             mm=pat.match(L[i])

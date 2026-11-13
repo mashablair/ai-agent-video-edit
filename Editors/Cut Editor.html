@@ -190,7 +190,7 @@ const idb={db:null,async open(){if(this.db)return this.db;this.db=await new Prom
 const canPick=!!window.showDirectoryPicker; if(!canPick)$('#fbNote').style.display='block';
 /* each video's editor files live in Videos/<name>/editor files/ */
 async function findProjects(fs,suffix){const out=[];for(const d of (await fs.dirs('Videos')).sort()){let fl=[];try{fl=await fs.list('Videos/'+d+'/editor files')}catch{}for(const n of fl)if(n.endsWith(suffix))out.push('Videos/'+d+'/editor files/'+n)}return out}
-const pname=(f,suffix)=>f.split('/').pop().replace(suffix,'');
+const pname=(f,suffix)=>f.split('/').at(-3)||f.split('/').pop().replace(suffix,'');   // the video's folder name ("1108-4 stop chasing"); project files are named by code only
 async function useFS(fs){
   let files=[];try{files=await findProjects(fs,'_cut_project.json')}catch{toast('That folder has no “Videos” folder inside. Choose “AI agent video edit”.',5000);return false}
   if(!files.length){toast('No cut projects yet in Videos/. Ask Claude to clean a video first.',6000);return false}

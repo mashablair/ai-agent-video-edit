@@ -47,15 +47,15 @@ Maria drops an already-polished vertical talking video (GG dating or MTT AI cont
 8. **Check.** Once the project file exists, `$PY _agent/glorious.py sheet <project.json> <final video> ~/vp/<name>/sheet.jpg` makes a strip with one frame inside each slot plus face frames (captions show if they're on); view it. Confirm the frame count matches the length.
 9. **Deliver** to `AI agent video edit/Videos/<name>/`:
    - `<name>_broll.mp4`. If that exists, add _v2, _v3 and so on; never overwrite.
-   - `<name>_broll_list.txt` listing each slot as time, clip and line, plus the total B-roll percentage. Add the caption style used, if any.
-   - `editor files/<name>_broll_project.json` for her editors. Overwriting is fine because this is the live edit file:
+   - `<code>_broll_list.txt` listing each slot as time, clip and line, plus the total B-roll percentage. Add the caption style used, if any.
+   - `editor files/<code>_broll_project.json` for her editors. Overwriting is fine because this is the live edit file:
      `{"version":1, "video":"<path from her folder, e.g. Drop raw videos here/<file> or Videos/<name>/<name>_clean.mp4>", "duration":<sec>, "fps":<fps>, "rendered":"Videos/<name>/<the mp4 just written>", "status":"rendered", "savedAt":"<ISO time>", "words":[{w,s,e}...], "slots":[...same as broll.json...], "captions":{...}}`
    - Add a line to the usage log in CATALOG.md: `- <date>, <video topic>: clip, clip, ...`
 10. **Reply briefly** with a small table of what she says and what's on screen, where her face stays, and anything to check (for example, "if it feels busy, drop X first"). Mention she can open `Editors/Video Editor.html` in Chrome to tweak the B-roll or captions.
 
 ## Rendering her edits from the B-roll Editor
 When she says something like "render my B-roll edits for <name>" (or caption edits):
-1. Read `Videos/<name>/editor files/<name>_broll_project.json`. Its `status` should be `edited`, which means she clicked Save in the editor. If it says `rendered`, tell her nothing new was saved.
+1. Read `Videos/<name>/editor files/<code>_broll_project.json`. Its `status` should be `edited`, which means she clicked Save in the editor. If it says `rendered`, tell her nothing new was saved.
 2. Write `~/vp/<name>/broll.json` as `{"src": "<full expanded path to the video in AI agent video edit>", "slots": <project slots>}`.
    - Her edits are the plan. Don't re-pick clips, move slots, change caption style or re-transcribe.
    - Words she fixed or hid in the editor are already in the project's `words`. Use them as they are.
