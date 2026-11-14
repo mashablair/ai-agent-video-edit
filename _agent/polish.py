@@ -174,6 +174,20 @@ def auto_segs(W,dur,E,db,fps):
     import numpy as np
     sm,th=pause_level(db); ix=lambda t: min(len(db)-1,max(0,int(t*100)))
     lv=lambda t: sm[ix(t)]; quiet=lambda t: sm[ix(t)]<th[ix(t)]
+    # Real silence = within 4 dB of the room noise (15th percentile over +-5 s), not just under the pause level. Her soft word
+    # endings and onsets ("happy", "fights?", "Sometimes") sit at -41..-47 dB, under the -42 dB pause level, so edges placed at
+    # the pause level chopped them (her 1103-3 re-cut, 2026-11-14: she gave "happy" 0.25 s more tail).
+    n_=len(db); pts_=np.arange(0,n_,50)
+    room=np.interp(np.arange(n_),pts_,[np.percentile(db[max(0,i-500):min(n_,i+500)],15) for i in pts_])
+    still=lambda t: sm[ix(t):ix(t)+15].max()<room[ix(t)]+4   # the next 150 ms are all at room level (a p/t/k closure inside a word is ~60-80 ms: "ha-ppy")
+    def fade_end(t0,lim):   # where a word's soft tail reaches real silence, scanning forward from where it went under the pause level
+        t=t0
+        while t<min(lim,t0+0.25) and not still(t): t+=0.01   # a soft ending is at most ~0.25 s; past that it is breath or room noise
+        return t
+    def fade_start(t0,lim):   # mirror: where a soft onset rises out of real silence, scanning back from where it went over the pause level
+        t=t0
+        while t>max(lim,t0-0.25) and not still(t-0.15): t-=0.01
+        return t
     KP=E.get("keep_pauses",[])   # [[t1,t2],...] raw-time pauses Claude keeps whole: a smile, smirk or gesture, or a deliberate beat
     DEL=set()
     for a,b in del_ranges(E): DEL.update(range(a,b+1))
@@ -191,9 +205,13 @@ def auto_segs(W,dur,E,db,fps):
         i0,i1=g["first"],g["last"]; lim=W[i1+1]["s"]-0.03 if i1+1<len(W) else dur
         t=g["e"]
         while t<lim and not quiet(t): t+=0.01
-        g["e"]=min(lim,t+0.12); lo=W[i0-1]["s"]+0.15 if i0>0 else 0; t=g["s"]
+        tl=t+0.12   # a soft ending under the pause level ("fights?" at -47 dB) is followed to real silence, if it is a bump over what follows
+        if t+0.3<lim and sm[ix(t+0.03):ix(t+0.25)].max()>=np.median(sm[ix(t):ix(t+0.6)])+5: tl=max(tl,fade_end(t,lim)+0.10)
+        g["e"]=min(lim,tl); lo=W[i0-1]["s"]+0.15 if i0>0 else 0; t=g["s"]
         while t>lo and not quiet(t-0.01): t-=0.01
-        g["s"]=max(lo,t-0.08)
+        hd=t-0.08
+        if t-0.3>lo and sm[ix(t-0.25):ix(t-0.03)].max()>=np.median(sm[ix(t-0.6):ix(t)])+5: hd=min(hd,fade_start(t,lo)-0.06)
+        g["s"]=max(lo,hd)
         if i0>0 and i0-1 in DEL:   # after a cut word: start at the kept word's onset, skipping a breath or noise left between (her 1103-5 fix)
             k0,k1=ix(max(lo,W[i0]["s"]-0.6)),ix(W[i0]["s"]+0.1); q=0; onset=None
             for j in range(k0,k1):
@@ -204,7 +222,8 @@ def auto_segs(W,dur,E,db,fps):
             k0,k1=ix(W[i1]["s"]+0.12),ix(g["e"]); q=0
             for j in range(k0,k1):
                 q=q+1 if sm[j]<th[j] else 0
-                if q>=15: g["e"]=min(g["e"],(j-14)/100+0.18); break   # 150 ms of quiet; 0.18 s tail keeps a soft t/s ending
+                if q>=15:   # soft tail kept to real silence, but never past the cut word's start
+                    cw=W[i1+1]["s"]-0.03; g["e"]=min(g["e"],cw,max((j-14)/100+0.18,fade_end((j-14)/100,cw)+0.10)); break   # 150 ms of quiet; 0.18 s tail keeps a soft t/s ending
     for k in range(1,len(segs)):
         if segs[k]["s"]<segs[k-1]["e"]: segs[k]["s"]=segs[k-1]["e"]
     for a,b in KP:   # a kept pause between two phrases: join them so the whole beat stays
@@ -246,11 +265,17 @@ def auto_segs(W,dur,E,db,fps):
                     if qb_-qa_<=BEAT+0.05: continue    # 0.4 s after the line (the reaction) + 0.17 s before the next (her 1108-9 trim of a 1.1 s beat)
                     if qa_<=x+0.011 or qb_>=y-0.011: continue
                     pieces[-1][1]=qa_+0.40; pieces.append([qb_-0.17,y]); continue
-                lead=min([qb_-0.08]+[w-0.04 for w in soft])
+                # follow a soft ending/onset only when it is a real bump over the pause's own level ("ha-ppy": the "py" is 7 dB, the "s" of "fights?" 6 dB over
+                # its pause); a steady breath or room hum is not (1108-1 test: -48..-50 dB hum after "thing" kept 0.4 s of dead air)
+                # (the bump is measured against the 0.6 s after/before it, the same as when the phrase edges are set)
+                bump=lambda u,v,m: sm[ix(u):max(ix(u)+1,ix(v))].max()>=np.median(sm[ix(m[0]):max(ix(m[0])+1,ix(m[1]))])+5
+                lead=min([qb_-0.08]+([fade_start(qb_,qa_)-0.06] if bump(qb_-0.25,qb_-0.03,(qb_-0.6,qb_)) else [])+[w-0.04 for w in soft])
+                tail=max(qa_+0.12,fade_end(qa_,y)+0.10 if bump(qa_+0.03,qa_+0.25,(qa_,qa_+0.6)) else 0)
                 # 0.12 s of tail after the voice fades, 0.08 s of lead-in: ~0.2 s thinking pause, like her CapCut re-cut
                 if qa_<=x+0.011: pieces[-1][0]=max(pieces[-1][0],lead)
-                elif qb_>=y-0.011: pieces[-1][1]=min(pieces[-1][1],qa_+0.12)
-                else: pieces[-1][1]=qa_+0.12; pieces.append([lead,y])
+                elif qb_>=y-0.011: pieces[-1][1]=min(pieces[-1][1],tail)
+                elif lead<=tail: continue   # nothing left to squeeze once the soft tail and onset are kept
+                else: pieces[-1][1]=tail; pieces.append([lead,y])
             o2+=[{"s":u,"e":v} for u,v in pieces if v-u>0.05]
         out=o2
     F=1/fps
