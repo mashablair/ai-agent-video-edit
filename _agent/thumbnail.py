@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Glorious Goddess thumbnail maker (step 3 of the pipeline).
-usage: thumbnail.py NAME --headline "He just didn't *choose* you 🙄" [--n 3] [--at SEC ...]
+usage: thumbnail.py NAME --headline "He just didn't *choose* you 🙄" [--n 3] [--at SEC ...] [--sticker 🤨] [--bang]
   NAME = a folder in Videos/ (uses the newest Videos/NAME/NAME_clean[_vN].mp4); a video path also works (then --out DIR).
   *words* = blush italic accent; "|" forces a line break (otherwise lines are balanced automatically, at most 3).
+  --sticker EMOJI = a big emoji in the box's empty step corner; --bang = an oversized red ❗ after the last word, poking out of the box
+  (emoji stickers, experiment from her own edit of a thumbnail, 2026-11-19).
   Writes Videos/NAME/CODE_thumb_1..3.jpg (CODE = NAME up to the first space, e.g. 1108-4) at the video's own resolution (next set _v2, _v3; never overwrites),
   CODE_thumb_list.txt, and a side-by-side check image in ~/vp/NAME/thumb_compare.jpg.
 Look (approved 2026-11-08, from a GPT render she liked): her face big with the whole head in frame, crisp warm grade,
@@ -112,7 +114,7 @@ def emoji_img(ch, px):
     """Apple's emoji (what her viewers see on iPhone, crisp at 160 px); Twemoji PNG as the fallback off a Mac."""
     if os.path.exists(APPLE):
         im = Image.new("RGBA", (200, 200)); ImageDraw.Draw(im).text((0, 0), ch, font=ImageFont.truetype(APPLE, 160), embedded_color=True)
-        if im.getbbox(): return im.crop(im.getbbox()).resize((px, px), Image.LANCZOS)
+        if im.getbbox(): im = im.crop(im.getbbox()); return im.resize((max(1, round(px*im.width/im.height)), px), Image.LANCZOS)   # px tall, own shape (❗ is narrow)
     cp = "-".join(f"{ord(c):x}" for c in ch if ord(c)!=0xfe0f); p = A(f"emoji/{cp}.png")
     if not os.path.exists(p):
         os.makedirs(A("emoji"), exist_ok=True)
@@ -131,8 +133,9 @@ def tokens(text):
         out += [(w, i % 2 == 1) for w in ws]
     return out
 
-def layout(headline):
-    """Largest size whose lines (forced with |, else the most balanced split into <=3 lines) fit the frame with the box."""
+def layout(headline, tail=lambda s: 0):
+    """Largest size whose lines (forced with |, else the most balanced split into <=3 lines) fit the frame with the box.
+    tail(s) = how far something after the last line (the ❗) reaches past the box's right edge."""
     allt = tokens(headline.replace("|", " | ")); toks = [t for t in allt if t[0] != "|"]; forced = None
     if "|" in headline:                                                    # an *accent* may span a forced break
         forced = [[]]
@@ -148,12 +151,15 @@ def layout(headline):
             if forced: splits = [forced]
             else:
                 n = len(toks); splits = [[toks]] + [[toks[:i], toks[i:]] for i in range(1, n)] + [[toks[:i], toks[i:j], toks[j:]] for i in range(1, n) for j in range(i+1, n)]
-            ok = [L for L in splits if max(width(l) for l in L) <= room and (forced or not whole or not split_acc(L))]
+            ok = [L for L in splits if max(width(l) for l in L) <= room and width(L[-1]) + max(0, tail(s)) <= room and (forced or not whole or not split_acc(L))]
             if ok: return s, min(ok, key=lambda L: (max(width(l) for l in L) - min(width(l) for l in L)) + (0 if len(L) > 1 else 1e9)), width
     sys.exit("headline too long for a thumbnail")
 
-def headline_layers(headline):
-    s, L, width = layout(headline); reg, ita = fonts(s); sp = reg.getlength(" ")
+BANG_H = 1.25                                                           # ❗ height / font size (hers: taller than the caps)
+def headline_layers(headline, sticker=None, bang=False):
+    bw = lambda s: emoji_img("❗", int(BANG_H*s)).width
+    s, L, width = layout(headline, (lambda s: int(s*0.06) + bw(s) - int(s*0.36)) if bang else (lambda s: 0))
+    reg, ita = fonts(s); sp = reg.getlength(" ")
     lh = [int((ita if any(a for _, a in ln) else reg).size*1.02) for ln in L]
     padx, pady, x0, r = int(s*0.36), int(s*0.22), int(64*K), int(s*0.26)
     y = ytop = safe()[1] - int(30*K) - sum(lh) - 2*pady                   # the whole box inside the grid-safe area
@@ -171,17 +177,30 @@ def headline_layers(headline):
             f = ita if acc else reg; col = BLUSH if acc else CREAM; yy = y - f.getbbox("A")[1]*0.55
             for g in segs(w):
                 if EMO.match(g):
-                    px = int(f.size*0.9); txt.alpha_composite(emoji_img(g, px), (int(x), int(yy+f.size*0.12))); x += px*1.1
+                    px = int(f.size*0.9); e = emoji_img(g, px); txt.alpha_composite(e, (int(x), int(yy+f.size*0.12))); x += e.width + px*0.1
                 else: dt.text((x, yy), g, font=f, fill=col+(255,)); x += f.getlength(g)
             x += sp
         y += h
-    return boxl, txt, dict(size=s, lines=[" ".join(w for w, _ in ln) for ln in L])
+    stk = Image.new("RGBA", (W, H))                                        # stickers sit on top, with their own shadow
+    if bang:                                                               # bottom on the last line's baseline
+        e = emoji_img("❗", int(BANG_H*s)); base_y = y - h + reg.getbbox("A")[3] - reg.getbbox("A")[1]*0.55
+        stk.alpha_composite(e, (int(x - sp + s*0.06), int(base_y - e.height + s*0.04)))
+    if sticker:
+        e = emoji_img(sticker, int(s*0.92)); m = int(44*K)
+        step = [(a, b) for a, b in zip(rows, rows[1:]) if b[2] - a[2] >= e.width*1.15]   # a line wider than the one above
+        if step:                                                           # in that empty corner, near its right end, resting on the lower line
+            (a0, a1, ax), (b0, b1, bx) = step[0]; ex = max(ax + int(s*0.12), bx - int(s*0.5) - e.width); ey = b0 - int(e.height*0.72)
+        else:                                                              # no step: on the top-right corner of the box
+            ex = rows[0][2] - int(e.width*0.55); ey = rows[0][0] - int(e.height*0.62)
+        stk.alpha_composite(e, (int(min(ex, W - m - e.width)), int(ey)))
+    return boxl, txt, stk, dict(size=s, lines=[" ".join(w for w, _ in ln) for ln in L], sticker=sticker or "", bang=bang)
 
-def make(v, t, headline, out):
+def make(v, t, headline, out, sticker=None, bang=False):
     frame, a = framed(v, t); canvas = Image.fromarray(np.clip(base(frame, a),0,255).astype(np.uint8)[:,:,::-1]).convert("RGBA")
-    boxl, txt, info = headline_layers(headline); canvas.alpha_composite(boxl)
-    sh = Image.new("RGBA", (W, H)); sh.putalpha(txt.getchannel("A").point(lambda v: v*0.35))
-    canvas.alpha_composite(sh.filter(ImageFilter.GaussianBlur(4*K)), (0, int(3*K))); canvas.alpha_composite(txt)
+    boxl, txt, stk, info = headline_layers(headline, sticker, bang); canvas.alpha_composite(boxl)
+    for lay, op in ((txt, 0.35), (stk, 0.4)):
+        sh = Image.new("RGBA", (W, H)); sh.putalpha(lay.getchannel("A").point(lambda v: v*op))
+        canvas.alpha_composite(sh.filter(ImageFilter.GaussianBlur(4*K)), (0, int(3*K))); canvas.alpha_composite(lay)
     canvas.convert("RGB").save(out, quality=94)
     return dict(file=out, t=round(t,2), **info)
 
@@ -197,6 +216,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("video", help="Videos/ folder name or a video path")
     ap.add_argument("--headline", required=True); ap.add_argument("--out")
     ap.add_argument("--n", type=int, default=3); ap.add_argument("--at", type=float, nargs="*")
+    ap.add_argument("--sticker", help="one emoji in the box's empty step corner"); ap.add_argument("--bang", action="store_true", help="oversized red ❗ after the last word")
     g = ap.parse_args()
     if os.path.isfile(g.video):
         video = g.video; name = re.sub(r"_clean(_v\d+)?$", "", os.path.splitext(os.path.basename(video))[0])
@@ -204,19 +224,19 @@ if __name__ == "__main__":
     else:
         m = [d for d in os.listdir(os.path.join(ROOT, "Videos")) if d == g.video or d.split(" ")[0] == g.video]   # "1108-4" or the full folder name
         if len(m) != 1: sys.exit(f"no single video folder for {g.video!r} in Videos/: {m}")
-        name = m[0]; outdir = g.out or os.path.join(ROOT, "Videos", name)
-        cands = {0 if m.group(1) is None else int(m.group(1)): f for f in os.listdir(outdir)   # newest NAME_clean[_vN].mp4
-                 for m in [re.fullmatch(re.escape(name) + r"_clean(?:_v(\d+))?\.mp4", f)] if m} if os.path.isdir(outdir) else {}
-        if not cands: sys.exit(f"no clean video in {outdir} (run step 1 first)")
-        video = os.path.join(outdir, cands[max(cands)])
+        name = m[0]; vdir = os.path.join(ROOT, "Videos", name); outdir = g.out or vdir
+        cands = {0 if m.group(1) is None else int(m.group(1)): f for f in os.listdir(vdir)     # newest NAME_clean[_vN].mp4
+                 for m in [re.fullmatch(re.escape(name) + r"_clean(?:_v(\d+))?\.mp4", f)] if m}
+        if not cands: sys.exit(f"no clean video in {vdir} (run step 1 first)")
+        video = os.path.join(vdir, cands[max(cands)])
     W, H = size(video); K = W/1080; os.makedirs(outdir, exist_ok=True)
     times = g.at or [r["t"] for r in pick(score_frames(video), g.n)]
     tag, files = outputs(name, outdir, len(times))
-    res = [make(video, t, g.headline, f) for t, f in zip(times, files)]
+    res = [make(video, t, g.headline, f, g.sticker, g.bang) for t, f in zip(times, files)]
     wd = os.path.expanduser(f"~/vp/{name}"); os.makedirs(wd, exist_ok=True)
     cv2.imwrite(os.path.join(wd, f"thumb{tag}_compare.jpg"), np.hstack([cv2.resize(cv2.imread(r["file"]), (360, 640)) for r in res]))
     with open(os.path.join(outdir, f"{name.split(' ')[0]}_thumb{tag}_list.txt"), "w") as fh:
-        fh.write(f"Headline: {g.headline}\nVideo: {os.path.basename(video)}\n")
+        fh.write(f"Headline: {g.headline}\nVideo: {os.path.basename(video)}\n" + (f"Stickers: {g.sticker or ''}{' ❗' if g.bang else ''}\n" if g.sticker or g.bang else ""))
         for r in res:
             m, s_ = divmod(r["t"], 60)
             fh.write(f"{os.path.basename(r['file'])}: frame at {int(m)}:{s_:04.1f}, {r['size']}px, lines: {' / '.join(r['lines'])}\n")
