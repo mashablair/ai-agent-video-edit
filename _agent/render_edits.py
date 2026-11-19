@@ -5,7 +5,7 @@
    (polish.py fromcut/plan/audio/chunk/assemble/qa), deliver Videos/NAME/NAME_clean_vN.mp4 and refresh the cut project.
    The visuals were already moved to the new cut by the editor (broll project "cutKeep"); polish.py remap only
    moves them when they still sit on the old cut (e.g. after an edit in the old Cut Editor).
-2. Render the Glorious video (glorious.py plan/chunk/assemble) and deliver Videos/NAME/NAME_glorious_vN.mp4.
+2. Re-plan the sound effects for the current visuals (glorious.py sfx), render the Glorious video (glorious.py plan/chunk/assemble) and deliver Videos/NAME/NAME_glorious_vN.mp4.
 3. The cover video (NAME_glorious_vN_cover.mp4, the file she posts) is rebuilt with the thumbnail picked in the broll project's "thumb".
 4. Superseded versions (old covers too) go to _agent/tmp/superseded/, the usage-log line in CATALOG.md is refreshed, and a contact
    sheet (one frame per B-roll slot plus a few on her face) is written to the work dir for checking.
@@ -41,11 +41,20 @@ def prune(dry=False):
     codes=sorted({d.split(" ")[0] for d in os.listdir(f"{VID}/Videos") if os.path.isdir(f"{VID}/Videos/{d}")},key=len,reverse=True)
     groups={}
     for f in os.listdir(T):
-        if not f.endswith(".mp4"): continue
         c=next((c for c in codes if f.startswith(c+"_") or f.startswith(c+" ")),None)
+        if not f.endswith(".mp4"):   # old list .txt files: only removed once the video is gone
+            if c is None and re.match(r"\d{4}-\d+[_ ]",f):
+                print(f"  {'would delete' if dry else 'deleted'} {f} (its video folder is gone)")
+                if not dry: os.remove(f"{T}/{f}")
+            continue
         kind="clean" if "_clean" in f else "cover" if "_cover" in f else "glorious" if "_glorious" in f else None
         if c is None: groups.setdefault(("gone",f),[]).append(f)
         elif kind: groups.setdefault((c,kind),[]).append(f)
+    vp=f"{HOME}/vp"   # work dirs of videos she has deleted (posted)
+    for d in (os.listdir(vp) if os.path.isdir(vp) else []):
+        if re.match(r"\d{4}-\d+[_ ]",d) and not any(d.startswith(c+"_") or d.startswith(c+" ") for c in codes):
+            print(f"  {'would delete' if dry else 'deleted'} work dir ~/vp/{d} (its video folder is gone)")
+            if not dry: shutil.rmtree(f"{vp}/{d}",ignore_errors=True)
     for (c,kind),fs in groups.items():
         fs.sort(key=lambda f:os.path.getmtime(f"{T}/{f}"))
         for f in (fs if c=="gone" else fs[:-1]):
@@ -89,6 +98,8 @@ def main(name,dry=False):
         print(" ",run(POL,"capsync",BP,new,f"{wd}/oldkeep.json",quiet=True).strip().splitlines()[-1])   # listen: caption words at the new joins
         if old!=new: retire(old)
     print("== visuals ==")
+    # sounds follow her B-roll/accent/zoom edits (the editor has no Sounds controls, so cues went stale: 1108-1, 2026-11-16)
+    if (B.get("sfx") or {}).get("enabled",True): run(GLO,"sfx",BP,quiet=True); print("  sound effects re-planned:",len(J(BP)["sfx"]["cues"]),"cues")
     wd=fresh(f"{HOME}/vp/{name}_g")
     pl=run(GLO,"plan",BP,quiet=True); n=int(re.findall(r"chunks (\d+)",pl)[-1])
     for k in range(n): run(GLO,"chunk",BP,wd,str(k),quiet=True)

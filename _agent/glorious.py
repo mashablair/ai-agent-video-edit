@@ -173,7 +173,7 @@ def numbers(pp,dry=False):
                 if c==k: return q+1
                 if c>k: return None
             return None
-        text=None; used=0; emph=True
+        text=None; used=0; emph=True; age=False
         y=_year(tok,0)
         if y: text=str(y[0]); used=y[1]
         else:
@@ -187,6 +187,12 @@ def numbers(pp,dry=False):
                         k2=b[3]; un=k2<len(tok) and tok[k2] in ("dollars","bucks"); end=k2>=len(tok)
                         if un or end or prev in COSTS:
                             text=f"${v:g} {nxt} {_money(b[0],b[1])}"; used=k2+(1 if un else 0)
+                # ages (her request, 2026-11-16: "20 years old", "over 40" read faster than words): only with "year(s) old" or after over/under/turning
+                if text is None and sc is None and not dl and v==int(v) and not re.search(r"\d",tok[0]):
+                    if 1<=v<=120 and nxt in ("year","years") and k+1<len(tok) and tok[k+1]=="old":
+                        hy=span(k) is None or span(k+1) is None   # "twenty-year-old" is one word
+                        text=f"{int(v)}-year-old" if hy else str(int(v)); used=k+2 if hy else k; age=True
+                    elif 18<=v<=99 and prev in ("over","under","turning","turned","past","almost","nearly"): text=str(int(v)); used=k; age=True
                 if text is None:
                     if nxt in ("dollars","dollar","bucks","buck"): text=_money(v,sc); used=k+1
                     elif nxt=="percent": text=_num(v)+"%"; used=k+1
@@ -200,7 +206,7 @@ def numbers(pp,dry=False):
             g=W[i:i+n]; punct=re.search(r"[.?!,;:]*$",g[-1]["w"])[0]; new=text+punct
             same=(n==1 and g[0]["w"]==new)
             keep={k_:v_ for k_,v_ in g[0].items() if k_ not in ("w","s","e","emph")}
-            emph_=g[0].get("emph") if same and g[0].get("emph") else "num"
+            emph_=g[0].get("emph") if (same or age) and g[0].get("emph") else "num"   # an age keeps the keyword style she picked
             if not same or g[0].get("emph")!=emph_: log.append(f"{g[0]['s']:6.2f}s  {' '.join(x['w'] for x in g)}  ->  {new} [{emph_}]")
             out.append(dict(keep,w=new,s=g[0]["s"],e=g[-1]["e"],emph=emph_)); i+=n; continue
         out.append(w); i+=1
