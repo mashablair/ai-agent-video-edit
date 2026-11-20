@@ -14,8 +14,8 @@ Usage:  glorious.py numbers PROJECT.json [--dry]  -> spoken prices/years/percent
         glorious.py chunk PROJECT.json WD N      -> WD/glo_N.mp4 (video only)
         glorious.py assemble PROJECT.json WD OUT -> joins chunks + the source audio
         glorious.py hookbox PROJECT.json OUT.png -> the hook text box alone (to check it by eye)
-        glorious.py placehook PROJECT.json [--dry] -> puts the hook box below her chin (or above her head when there's
-                                                  room) and moves the captions under it while it shows; also placeaccents
+        glorious.py placehook PROJECT.json [--dry] -> puts the hook box on top, over her head, and the captions on her
+                                                  chest while it shows (below her chin if the box would hide her face); also placeaccents
         glorious.py sfx PROJECT.json [--dry]       -> plans the sound effects (project "sfx"; mixed in by assemble)
         glorious.py placeaccents PROJECT.json [--dry] -> accent words just above her head, the head covering them slightly
 Times are absolute; each chunk is rendered on an absolute timeline, so captions/B-roll can cross chunk edges."""
@@ -613,13 +613,20 @@ def place_accents(pp,dry=False):
     if dry: return
     P["accentStyle"]=dict(P.get("accentStyle") or {},y=round(y/H,3),size=size); json.dump(P,open(pp,"w"),indent=1)
 
+HB_TOP=0.085   # hook box top when it sits on top (her 1108-6 edit, 2026-11-20)
 def hook_spot(pl,bh,gap=0.03):
-    """(box centre y, caption y while it shows or None, "above"/"below"). Same rule as the editor's hookSpot."""
-    lo,hi=HB_SAFE; free=pl["top"]-gap-lo
-    if free-bh>=0.06: return round((lo+pl["top"]-gap)/2,3),None,"above her head"
+    """(box centre y, caption y while it shows or None, where). Same rule as the editor's hookSpot.
+    Her rule (2026-11-20, from her 1108-6 edit: "hook on top of me, captions on my chest, so people are not confused"):
+    the box at the top of the frame, over the top of her head, and the captions up on her chest just under her chin while
+    it shows. Only if the box would reach more than a quarter of her head height into her face does it go below her chin."""
+    y=HB_TOP+bh/2; norm=min(pl["capNormal"],pl["capB"] if pl.get("capB") is not None else 9)
+    if y+bh/2<=pl["top"]+0.25*(pl["chin"]-pl["top"]):
+        cap=pl["chin"]+0.05+pl["capOff"]
+        return round(y,3),(round(cap,3) if cap<norm else None),"on top, over her head"
+    lo,hi=HB_SAFE
     y=min(pl["chin"]+gap+bh/2,hi-bh/2,CAP_MAX-pl["capOff"]-0.02-bh/2)   # the captions must still fit under it
     where="below her chin" if y-bh/2>=pl["chin"]+0.01 else f"low as allowed (touches her chin by {pl['chin']+0.01-(y-bh/2):.3f})"
-    need=y+bh/2+0.02+pl["capOff"]; norm=min(pl["capNormal"],pl["capB"] if pl.get("capB") is not None else 9)
+    need=y+bh/2+0.02+pl["capOff"]
     return round(y,3),(round(need,3) if need>norm else None),where
 
 def accent_mask(S,hk,wd):

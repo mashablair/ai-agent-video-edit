@@ -872,12 +872,13 @@ const ACCDEF={y:0.22,size:0.34,style:'neg',color:'#FFFFFF',outlineOn:false,outli
 const HBDEF={enabled:false,text:'',options:[],a:0,b:6,style:'serif',size:0.07,y:0.56,box:0.74,capY:null};
 // captions move to hookText.capY while the hook text shows (so they never sit on the box), then go back (same as glorious.py)
 const hookCapY=ch=>{const h=hbox();return h.enabled&&h.text.trim()&&h.capY!=null&&ch.words[0].s<h.b&&ch.words.at(-1).e>h.a?h.capY:null};
-/* where the hook box goes (same rule as glorious.py hook_spot): above her head when there's plenty of room under Instagram's
-   top bar, else just below her chin; captions drop below the box while it shows if they'd touch it. hookText.place holds
+/* where the hook box goes (same rule as glorious.py hook_spot; her rule 2026-11-20): on top of the frame over her head, captions
+   up on her chest just under her chin while it shows; below her chin only if the box would reach into her face. hookText.place holds
    her head top / chin measured over the whole hook (zooms included) by glorious.py placehook. */
-const HB_SAFE=[0.11,0.80],CAP_MAX=0.82;
-function hookSpot(pl,bh,gap=0.03){const [lo,hi]=HB_SAFE,free=pl.top-gap-lo;if(free-bh>=0.06)return{y:r3((lo+pl.top-gap)/2),capY:null};
-  const y=Math.min(pl.chin+gap+bh/2,hi-bh/2,CAP_MAX-pl.capOff-0.02-bh/2),need=y+bh/2+0.02+pl.capOff,norm=Math.min(pl.capNormal,pl.capB??9);return{y:r3(y),capY:need>norm?r3(need):null}}
+const HB_SAFE=[0.11,0.80],CAP_MAX=0.82,HB_TOP=0.085;
+function hookSpot(pl,bh,gap=0.03){const [lo,hi]=HB_SAFE,norm=Math.min(pl.capNormal,pl.capB??9),top=HB_TOP+bh/2;
+  if(top+bh/2<=pl.top+0.25*(pl.chin-pl.top)){const cap=pl.chin+0.05+pl.capOff;return{y:r3(top),capY:cap<norm?r3(cap):null}}
+  const y=Math.min(pl.chin+gap+bh/2,hi-bh/2,CAP_MAX-pl.capOff-0.02-bh/2),need=y+bh/2+0.02+pl.capOff;return{y:r3(y),capY:need>norm?r3(need):null}}
 const r3=v=>Math.round(v*1000)/1000;
 function autoPlace(force){const h=hbox(),st=$('#stage');if(!h.place||(!force&&h.auto===false)||!h.text.trim()||h.style==='card')return;
   const W=st.clientWidth,H=st.clientHeight,L=hbLayout(h,W),s=L.st,bh=(L.lines.length*s[6]*L.em+2*s[8]*L.em)/H;
@@ -1149,7 +1150,7 @@ function renderHookPanel(){
     <div class="ctl"><label class="tog" style="width:92px" title="Where the captions sit while the hook text shows; they go back to their usual height after it"><input type="checkbox" id="hbCapOn"${h.capY!=null?' checked':''}> Captions</label><input type="range" id="hbCapY" min="0.4" max="0.92" step="0.005" value="${h.capY??cfg().y}"${h.capY!=null?'':' disabled'}><span class="out" id="hbCapYO">${h.capY!=null?pc(h.capY):'usual'}</span></div>
     <div class="ctl"><label>Shows</label><input type="number" id="hbA" step="0.1" min="0" value="${h.a}" style="width:70px"><span class="muted small">to</span><input type="number" id="hbB" step="0.1" min="0" value="${h.b}" style="width:70px"><span class="muted small">s (${(h.b-h.a).toFixed(1)}s)</span></div>
     <div class="ctl"><label>Until the end of</label><button data-sn="1">1st sentence</button><button data-sn="2">2nd</button><button data-sn="3">3rd</button></div>
-    <div class="muted small">Auto keeps the box off your face (below your chin, or above your head when there's room) and follows when you switch the text or size. Dragging the box or the Height slider turns Auto off. "Captions" = their height while the hook shows (tick it to move them out of the box's way); they go back to normal after. Keep everything away from the bottom, where Instagram puts your name and caption.</div>
+    <div class="muted small">Auto puts the box on top, over your head, and your captions on your chest while it shows (below your chin only if the box would hide your face) and follows when you switch the text or size. Dragging the box or the Height slider turns Auto off. "Captions" = their height while the hook shows (tick it to move them out of the box's way); they go back to normal after. Keep everything away from the bottom, where Instagram puts your name and caption.</div>
     <h4>Accent words (big, behind you)</h4>
     <div id="acList">${A.map((x,i)=>`<div class="zl"><span class="t" data-as="${i}">${fmt(x.a)}</span><input type="text" data-at="${i}" value="${escH(x.text)}"><input type="number" step="0.05" data-aa="${i}" value="${x.a}" title="Starts at"><input type="number" step="0.05" data-ab="${i}" value="${x.b}" title="Ends at"><button data-ax="${i}" title="Remove">×</button></div>`).join('')||'<div class="muted small">No accent words yet.</div>'}</div>
     <div class="row"><button id="acAdd">+ Accent word at playhead</button></div>
